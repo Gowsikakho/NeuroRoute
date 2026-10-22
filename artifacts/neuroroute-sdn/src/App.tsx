@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { Link, Route, Router as WouterRouter, Switch, useLocation } from 'wouter';
 import { Activity, ArrowDownToLine, BookOpen, Boxes, Check, CircleHelp, Clock3, Cpu, Gauge, GitCompareArrows, Network, Play, Radio, RotateCcw, Settings2, Square, Waypoints } from 'lucide-react';
-import { Background, BackgroundVariant, Controls, MarkerType, ReactFlow, type Edge, type Node } from '@xyflow/react';
+import { applyNodeChanges, Background, BackgroundVariant, Controls, MarkerType, MiniMap, ReactFlow, type Edge, type Node, type ReactFlowInstance } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import {
   getGetAlgorithmsQueryKey, getGetControllerStateQueryKey, getGetExperimentsQueryKey, getGetQueueMetricsQueryKey, getGetSimulationQueryKey, getGetTopologiesQueryKey,
@@ -12,6 +12,7 @@ import {
 import type { Algorithm, ExperimentInput, QueueMetricPoint, SimulationStartInput, SimulationState, Topology } from '@workspace/api-client-react';
 import { useConsoleStore } from '@/lib/console-store';
 import { useSimulationStream } from '@/hooks/use-simulation-stream';
+import topologyLayoutsJson from './topologies/layouts.json';
 import './index.css';
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } } });
@@ -67,42 +68,41 @@ function Metrics({ simulation }: { simulation?: SimulationState }) {
   return <div className="metrics-strip">{items.map((m) => <div className="metric-card" key={m.label} data-testid={`metric-${m.label.toLowerCase().replaceAll(' ', '-')}`}><div className="metric-label">{m.label}</div><div className="metric-value">{m.value}<span className="metric-unit">{m.unit}</span></div><div className="metric-foot">{m.foot}</div></div>)}</div>;
 }
 
-function TopologyView({ topology }: { topology?: Topology }) {
-  const canvasRef = useRef<HTMLDivElement>(null);
-  const [canvasSize, setCanvasSize] = useState({ width: 600, height: 280 });
-  useEffect(() => {
-    const element = canvasRef.current;
-    if (!element) return;
-    const measure = () => {
-      const { width, height } = element.getBoundingClientRect();
-      setCanvasSize(current => Math.round(current.width) === Math.round(width) && Math.round(current.height) === Math.round(height)
-        ? current
-        : { width, height });
-    };
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [topology?.id]);
-  if (!topology) return <div className="empty-state"><div className="empty-icon"><Network size={18} /></div><strong>No topology selected</strong><p>Select a topology once the catalog has loaded.</p></div>;
-  const nodes = topology.nodes || [];
-  const minX = Math.min(...nodes.map(n => n.x)), maxX = Math.max(...nodes.map(n => n.x));
-  const minY = Math.min(...nodes.map(n => n.y)), maxY = Math.max(...nodes.map(n => n.y));
-  const xSpan = maxX - minX || 1, ySpan = maxY - minY || 1;
-  const padX = Math.max(42, Math.min(72, canvasSize.width * 0.12));
-  const padY = Math.max(42, Math.min(64, canvasSize.height * 0.17));
-  const graphWidth = Math.max(1, canvasSize.width - padX * 2);
-  const graphHeight = Math.max(1, canvasSize.height - padY * 2);
-  const graphNodes: Node[] = nodes.map(node => ({
+const topologyLayouts = topologyLayoutsJson as Record<string, Record<string, { x: number; y: number }>>;
+
+function createTopologyNodes(topology: Topology): Node[] {
+  const savedPositions = topologyLayouts[topology.id] ?? {};
+  return (topology.nodes || []).map(node => ({
     id: node.id,
-    position: {
-      x: padX + (maxX === minX ? 0.5 : (node.x - minX) / xSpan) * graphWidth,
-      y: padY + (maxY === minY ? 0.5 : (node.y - minY) / ySpan) * graphHeight,
-    },
+    position: savedPositions[node.id] ?? { x: node.x * 10, y: node.y * 10 },
     data: { label: node.label },
     className: 'topology-flow-node',
     type: 'default',
   }));
+}
+
+function TopologyView({ topology, resetVersion }: { topology?: Topology; resetVersion: number }) {
+  const flowInstance = useRef<ReactFlowInstance | null>(null);
+  const shouldFitView = useRef(false);
+  const [nodes, setNodes] = useState<Node[]>([]);
+  const [nodesTopologyId, setNodesTopologyId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!topology) return;
+    shouldFitView.current = true;
+    setNodes(createTopologyNodes(topology));
+    setNodesTopologyId(topology.id);
+  }, [topology?.id, resetVersion]);
+  useEffect(() => {
+    if (!nodes.length || !shouldFitView.current) return;
+    shouldFitView.current = false;
+    const frame = requestAnimationFrame(() => {
+      void flowInstance.current?.fitView({ padding: 0.15, minZoom: 0.25, maxZoom: 1.6 });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [nodes]);
+  if (!topology) return <div className="empty-state"><div className="empty-icon"><Network size={18} /></div><strong>No topology selected</strong><p>Select a topology once the catalog has loaded.</p></div>;
+  const topologyNodes = topology.nodes || [];
+  const nodesReady = nodesTopologyId === topology.id && nodes.length === topologyNodes.length;
   const links = topology.links || [];
   const maxUtilization = Math.max(0, ...links.map(link => link.utilization));
   const graphEdges: Edge[] = links.map(link => {
@@ -120,22 +120,26 @@ function TopologyView({ topology }: { topology?: Topology }) {
       markerEnd: { type: MarkerType.ArrowClosed, color, width: 12, height: 12 },
     };
   });
-  return <div ref={canvasRef} className="topology-canvas" data-testid="topology-map">
-    {nodes.length ? <ReactFlow
-      key={`${topology.id}-${Math.round(canvasSize.width)}x${Math.round(canvasSize.height)}`}
-      nodes={graphNodes}
+  return <div className="topology-canvas" data-testid="topology-map">
+    {nodesReady && topologyNodes.length ? <ReactFlow
+      key={topology.id}
+      nodes={nodes}
       edges={graphEdges}
+      onInit={instance => { flowInstance.current = instance; }}
+      onNodesChange={changes => setNodes(current => applyNodeChanges(changes, current))}
       fitView
-      fitViewOptions={{ padding: 0.22, minZoom: 0.35, maxZoom: 1.6 }}
+      fitViewOptions={{ padding: 0.15, minZoom: 0.25, maxZoom: 1.6 }}
       minZoom={0.25}
       maxZoom={2}
+      nodesDraggable
       nodesConnectable={false}
       elementsSelectable
       aria-label={`${topology.name} interactive network topology`}
     >
       <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#d4ddd3" />
       <Controls showInteractive={false} />
-    </ReactFlow> : <EmptyBlock title="Topology has no nodes" copy="The selected topology does not provide node coordinates." />}
+      <MiniMap position="top-right" nodeColor="#43866f" pannable zoomable />
+    </ReactFlow> : nodesReady ? <EmptyBlock title="Topology has no nodes" copy="The selected topology does not provide node coordinates." /> : <div className="topology-preparing">Preparing topology layout…</div>}
     <div className="canvas-meta">{topology.nodeCount} NODES&nbsp; / &nbsp;{topology.linkCount} LINKS</div>
   </div>;
 }
@@ -273,6 +277,7 @@ function Dashboard() {
   const [lsRate, setLsRate] = useState(50);
   const [tsRate, setTsRate] = useState(50);
   const [actionError, setActionError] = useState('');
+  const [layoutResetVersion, setLayoutResetVersion] = useState(0);
   useEffect(() => { if (!topologyId && topologies.data?.length) setTopologyId(topologies.data[0].id); }, [topologies.data, topologyId]);
   useEffect(() => { if (!algorithm && algorithms.data?.length) setAlgorithm(algorithms.data.find(a => a.available)?.id || algorithms.data[0].id); }, [algorithms.data, algorithm]);
   const topology = topologies.data?.find(t => t.id === topologyId);
@@ -300,8 +305,8 @@ function Dashboard() {
         <div className="dashboard-grid">
           <Panel title="Network topology" icon={Network} meta={topology?.name || 'CATALOG'} className="topology-panel">
             <div className="panel-body" style={{ paddingTop: 13 }}>
-              {topologies.data?.length ? <><div className="field" style={{ maxWidth: 280, marginBottom: 12 }}><label htmlFor="topology-select">Active topology</label><select id="topology-select" value={topologyId} onChange={e => setTopologyId(e.target.value)} data-testid="select-topology">{topologies.data.map(t => <option value={t.id} key={t.id}>{t.name}</option>)}</select></div>
-                <TopologyView topology={topology} /><p style={{ fontSize: 10, lineHeight: 1.6, color: '#77847d', margin: '10px 0 0' }}>{topology?.description}</p></>
+              {topologies.data?.length ? <><div className="topology-toolbar"><div className="field" style={{ maxWidth: 280 }}><label htmlFor="topology-select">Active topology</label><select id="topology-select" value={topologyId} onChange={e => setTopologyId(e.target.value)} data-testid="select-topology">{topologies.data.map(t => <option value={t.id} key={t.id}>{t.name}</option>)}</select></div><button className="btn btn-quiet" onClick={() => setLayoutResetVersion(version => version + 1)} disabled={!topology} data-testid="button-reset-layout"><RotateCcw size={13} />Reset layout</button></div>
+                <TopologyView topology={topology} resetVersion={layoutResetVersion} /><p style={{ fontSize: 10, lineHeight: 1.6, color: '#77847d', margin: '10px 0 0' }}>{topology?.description}</p></>
                 : <EmptyBlock title="Topology catalog is empty" copy="No network topology is currently available from the local API." />}
             </div>
           </Panel>

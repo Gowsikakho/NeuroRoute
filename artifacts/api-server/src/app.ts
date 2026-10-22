@@ -36,7 +36,9 @@ app.use("/api", async (req, res): Promise<void> => {
     await proxyPythonRequest(req, res);
   } catch (err) {
     req.log.error({ err }, "NeuroRoute API proxy failed");
-    res.status(502).json({ error: "NeuroRoute simulator is unavailable." });
+    res.status(503).json({
+      error: err instanceof Error ? err.message : "NeuroRoute simulator is unavailable.",
+    });
   }
 });
 

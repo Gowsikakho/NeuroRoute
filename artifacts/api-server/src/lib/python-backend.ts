@@ -9,6 +9,7 @@ import { logger } from "./logger";
 
 const PYTHON_PORT = Number(process.env["NEUROROUTE_API_PORT"] ?? 18081);
 const PYTHON_HOST = "127.0.0.1";
+const PYTHON_REQUEST_TIMEOUT_MS = 5_000;
 
 export function startPythonBackend(): ChildProcess {
   const workspaceRoot = path.resolve(import.meta.dirname, "../../../");
@@ -71,22 +72,38 @@ export async function proxyPythonRequest(
   const accept = req.header("accept");
   if (accept) headers.accept = accept;
 
-  const response = await fetch(upstreamUrl, {
-    method: req.method,
-    headers,
-    signal: AbortSignal.timeout(5_000),
-    body:
-      req.method === "GET" || req.method === "HEAD"
-        ? undefined
-        : JSON.stringify(req.body ?? {}),
-  });
-  res.status(response.status);
-  response.headers.forEach((value, key) => {
-    if (key !== "content-encoding" && key !== "transfer-encoding") {
-      res.setHeader(key, value);
-    }
-  });
-  res.send(Buffer.from(await response.arrayBuffer()));
+  try {
+    const response = await fetch(upstreamUrl, {
+      method: req.method,
+      headers,
+      signal: AbortSignal.timeout(PYTHON_REQUEST_TIMEOUT_MS),
+      body:
+        req.method === "GET" || req.method === "HEAD"
+          ? undefined
+          : JSON.stringify(req.body ?? {}),
+    });
+    res.status(response.status);
+    response.headers.forEach((value, key) => {
+      if (key !== "content-encoding" && key !== "transfer-encoding") {
+        res.setHeader(key, value);
+      }
+    });
+    res.send(Buffer.from(await response.arrayBuffer()));
+  } catch (error) {
+    const details =
+      error !== null && typeof error === "object"
+        ? (error as { name?: string; cause?: { code?: string; name?: string } })
+        : {};
+    const cause = details.name === "TimeoutError" || details.cause?.name === "TimeoutError"
+      ? `timed out after ${PYTHON_REQUEST_TIMEOUT_MS / 1000} seconds`
+      : details.cause?.code === "ECONNREFUSED"
+        ? "connection was refused"
+        : "could not be reached";
+    throw new Error(
+      `NeuroRoute simulator backend ${cause} at ${PYTHON_HOST}:${PYTHON_PORT}. Check that the Python API is running and that this port is free.`,
+      { cause: error },
+    );
+  }
 }
 
 export function proxyPythonWebSocket(server: Server): void {
