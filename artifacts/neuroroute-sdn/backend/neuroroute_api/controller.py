@@ -16,9 +16,9 @@ class SimulatedOpenFlowController:
         self._port_counters: dict[str, dict[str, int]] = defaultdict(
             lambda: {"rxPackets": 0, "txPackets": 0}
         )
-        self._queue_rates: dict[str, float] = {
-            switch_id: 0.62 for switch_id in switch_ids
-        }
+        # An absent switch entry uses the simulator's current default split.
+        # Explicit controller installs override only that switch.
+        self._queue_rates: dict[str, float] = {}
 
     def record_path(
         self,
@@ -79,7 +79,7 @@ class SimulatedOpenFlowController:
     def queue_rate(self, switch_id: str, default: float) -> float:
         return self._queue_rates.get(switch_id, default)
 
-    def state(self, metric_points: list[dict]) -> dict:
+    def state(self, metric_points: list[dict], default_rate: float = 0.62) -> dict:
         latest_elapsed = max(
             (point["elapsedSeconds"] for point in metric_points),
             default=None,
@@ -113,10 +113,10 @@ class SimulatedOpenFlowController:
                             6,
                         ),
                         "lsRatePercent": round(
-                            self.queue_rate(switch_id, 0.62) * 100, 2
+                            self.queue_rate(switch_id, default_rate) * 100, 2
                         ),
                         "tsRatePercent": round(
-                            (1 - self.queue_rate(switch_id, 0.62)) * 100, 2
+                            (1 - self.queue_rate(switch_id, default_rate)) * 100, 2
                         ),
                     },
                 }

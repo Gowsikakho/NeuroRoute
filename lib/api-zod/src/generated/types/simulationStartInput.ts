@@ -5,6 +5,8 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { FailureScheduleInput } from './failureScheduleInput';
+import type { SimulationStartInputSpeedMode } from './simulationStartInputSpeedMode';
 
 export interface SimulationStartInput {
   topologyId: string;
@@ -25,4 +27,6 @@ export interface SimulationStartInput {
      * @maximum 100
      */
   tsRate: number;
+  speedMode?: SimulationStartInputSpeedMode;
+  failureSchedule?: FailureScheduleInput | null;
 }

@@ -116,8 +116,13 @@ class OutputPortQueue:
                     self.interval_tx_packets += 1
                     on_transmit(packet, self)
 
-    def sample_and_reset(self, elapsed_seconds: float, timestamp: float) -> dict:
-        interval = max(elapsed_seconds, 1e-9)
+    def sample_and_reset(
+        self,
+        interval_seconds: float,
+        timestamp: float,
+        elapsed_seconds: float,
+    ) -> dict:
+        interval = max(interval_seconds, 1e-9)
         point = {
             "timestamp": timestamp,
             "elapsedSeconds": elapsed_seconds,

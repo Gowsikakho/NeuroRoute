@@ -5,6 +5,9 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { FlowMetric } from './flowMetric';
+import type { LinkEvent } from './linkEvent';
+import type { SimulationStateSpeedMode } from './simulationStateSpeedMode';
 import type { SimulationStateStatus } from './simulationStateStatus';
 
 export interface SimulationState {
@@ -18,5 +21,11 @@ export interface SimulationState {
   averageLatencyMs: number;
   throughputMbps: number;
   packetLossPercent: number;
+  droppedPackets: number;
+  transmitRateMbps: number;
+  speedMode: SimulationStateSpeedMode;
+  rerouteCount: number;
+  flowMetrics: FlowMetric[];
+  linkEvents: LinkEvent[];
   updatedAt: Date;
 }

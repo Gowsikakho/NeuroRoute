@@ -137,6 +137,7 @@ class SimulationManager(NetworkBackend):
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
         self._metrics: deque[dict] = deque(maxlen=14 * 3600)
+        self._last_poll_elapsed = 0.0
         self._topology: TopologyDefinition = TOPOLOGIES["demo-7"]
         self._graph = nx.Graph()
         self._edge_attributes: dict[str, dict] = {}
@@ -264,6 +265,7 @@ class SimulationManager(NetworkBackend):
         self._throughputs = []
         self._reroute_count = 0
         self._metrics.clear()
+        self._last_poll_elapsed = 0.0
         self._link_events = []
         self._flows = []
         self._flows_by_id = {}
@@ -605,10 +607,12 @@ class SimulationManager(NetworkBackend):
             return
         elapsed = float(environment.now)
         timestamp = time.time()
+        interval_seconds = max(elapsed - self._last_poll_elapsed, 1e-9)
         points = [
-            port.sample_and_reset(elapsed, timestamp)
+            port.sample_and_reset(interval_seconds, timestamp, elapsed)
             for port in self._output_ports.values()
         ]
+        self._last_poll_elapsed = elapsed
         self._metrics.extend(points)
         for switch_queue in self._queues.values():
             switch_queue["ls"] = 0.0
@@ -845,7 +849,7 @@ class SimulationManager(NetworkBackend):
 
     def controller_state(self) -> dict:
         with self._lock:
-            return self._controller.state(list(self._metrics))
+            return self._controller.state(list(self._metrics), self._service_split)
 
     def install_queue_rate(self, switch_id: str, ls_share: float) -> dict:
         with self._lock:

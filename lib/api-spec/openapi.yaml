@@ -309,7 +309,27 @@ components:
           type: number
           minimum: 0
           maximum: 100
+        speedMode:
+          type: string
+          enum: [fast, realtime]
+          default: realtime
+        failureSchedule:
+          oneOf:
+            - $ref: "#/components/schemas/FailureScheduleInput"
+            - type: "null"
       required: [topologyId, algorithm, durationSeconds, seed, lsRate, tsRate]
+    FailureScheduleInput:
+      type: object
+      properties:
+        linkId:
+          type: string
+        downSeconds:
+          type: number
+          minimum: 0
+        upSeconds:
+          type: number
+          minimum: 0
+      required: [linkId, downSeconds, upSeconds]
     SimulationState:
       type: object
       properties:
@@ -334,10 +354,63 @@ components:
           type: number
         packetLossPercent:
           type: number
+        droppedPackets:
+          type: integer
+        transmitRateMbps:
+          type: number
+        speedMode:
+          type: string
+          enum: [fast, realtime]
+        rerouteCount:
+          type: integer
+        flowMetrics:
+          type: array
+          items:
+            $ref: "#/components/schemas/FlowMetric"
+        linkEvents:
+          type: array
+          items:
+            $ref: "#/components/schemas/LinkEvent"
         updatedAt:
           type: string
           format: date-time
-      required: [id, status, topologyId, algorithm, elapsedSeconds, durationSeconds, activeFlows, averageLatencyMs, throughputMbps, packetLossPercent, updatedAt]
+      required: [id, status, topologyId, algorithm, elapsedSeconds, durationSeconds, activeFlows, averageLatencyMs, throughputMbps, packetLossPercent, droppedPackets, transmitRateMbps, speedMode, rerouteCount, flowMetrics, linkEvents, updatedAt]
+    FlowMetric:
+      type: object
+      properties:
+        flowId:
+          type: string
+        trafficClass:
+          type: string
+          enum: [ls, ts]
+        source:
+          type: string
+        destination:
+          type: string
+        generatedPackets:
+          type: integer
+        deliveredPackets:
+          type: integer
+        droppedPackets:
+          type: integer
+        meanLatencyMs:
+          type: number
+        lossPercent:
+          type: number
+        reroutes:
+          type: integer
+      required: [flowId, trafficClass, source, destination, generatedPackets, deliveredPackets, droppedPackets, meanLatencyMs, lossPercent, reroutes]
+    LinkEvent:
+      type: object
+      properties:
+        linkId:
+          type: string
+        status:
+          type: string
+          enum: [up, down]
+        elapsedSeconds:
+          type: number
+      required: [linkId, status, elapsedSeconds]
     QueueMetricPoint:
       type: object
       properties:
@@ -347,13 +420,27 @@ components:
           type: number
         switchId:
           type: string
+        portId:
+          type: string
         lsOccupancy:
           type: number
         tsOccupancy:
           type: number
         capacity:
           type: number
-      required: [timestamp, elapsedSeconds, switchId, lsOccupancy, tsOccupancy, capacity]
+        lsQueueBytes:
+          type: integer
+        tsQueueBytes:
+          type: integer
+        lsDrops:
+          type: integer
+        tsDrops:
+          type: integer
+        transmitRateMbps:
+          type: number
+        transmittedPackets:
+          type: integer
+      required: [timestamp, elapsedSeconds, switchId, portId, lsOccupancy, tsOccupancy, capacity, lsQueueBytes, tsQueueBytes, lsDrops, tsDrops, transmitRateMbps, transmittedPackets]
     ControllerQueueState:
       type: object
       properties:

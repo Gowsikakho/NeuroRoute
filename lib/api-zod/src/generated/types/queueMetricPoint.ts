@@ -10,7 +10,14 @@ export interface QueueMetricPoint {
   timestamp: number;
   elapsedSeconds: number;
   switchId: string;
+  portId: string;
   lsOccupancy: number;
   tsOccupancy: number;
   capacity: number;
+  lsQueueBytes: number;
+  tsQueueBytes: number;
+  lsDrops: number;
+  tsDrops: number;
+  transmitRateMbps: number;
+  transmittedPackets: number;
 }

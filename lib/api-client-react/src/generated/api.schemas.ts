@@ -43,6 +43,22 @@ export interface Algorithm {
   available: boolean;
 }
 
+export type SimulationStartInputSpeedMode = typeof SimulationStartInputSpeedMode[keyof typeof SimulationStartInputSpeedMode];
+
+
+export const SimulationStartInputSpeedMode = {
+  fast: 'fast',
+  realtime: 'realtime',
+} as const;
+
+export interface FailureScheduleInput {
+  linkId: string;
+  /** @minimum 0 */
+  downSeconds: number;
+  /** @minimum 0 */
+  upSeconds: number;
+}
+
 export interface SimulationStartInput {
   topologyId: string;
   algorithm: string;
@@ -62,6 +78,8 @@ export interface SimulationStartInput {
      * @maximum 100
      */
   tsRate: number;
+  speedMode?: SimulationStartInputSpeedMode;
+  failureSchedule?: FailureScheduleInput | null;
 }
 
 export type SimulationStateStatus = typeof SimulationStateStatus[keyof typeof SimulationStateStatus];
@@ -74,6 +92,49 @@ export const SimulationStateStatus = {
   completed: 'completed',
 } as const;
 
+export type SimulationStateSpeedMode = typeof SimulationStateSpeedMode[keyof typeof SimulationStateSpeedMode];
+
+
+export const SimulationStateSpeedMode = {
+  fast: 'fast',
+  realtime: 'realtime',
+} as const;
+
+export type FlowMetricTrafficClass = typeof FlowMetricTrafficClass[keyof typeof FlowMetricTrafficClass];
+
+
+export const FlowMetricTrafficClass = {
+  ls: 'ls',
+  ts: 'ts',
+} as const;
+
+export interface FlowMetric {
+  flowId: string;
+  trafficClass: FlowMetricTrafficClass;
+  source: string;
+  destination: string;
+  generatedPackets: number;
+  deliveredPackets: number;
+  droppedPackets: number;
+  meanLatencyMs: number;
+  lossPercent: number;
+  reroutes: number;
+}
+
+export type LinkEventStatus = typeof LinkEventStatus[keyof typeof LinkEventStatus];
+
+
+export const LinkEventStatus = {
+  up: 'up',
+  down: 'down',
+} as const;
+
+export interface LinkEvent {
+  linkId: string;
+  status: LinkEventStatus;
+  elapsedSeconds: number;
+}
+
 export interface SimulationState {
   id: string;
   status: SimulationStateStatus;
@@ -85,6 +146,12 @@ export interface SimulationState {
   averageLatencyMs: number;
   throughputMbps: number;
   packetLossPercent: number;
+  droppedPackets: number;
+  transmitRateMbps: number;
+  speedMode: SimulationStateSpeedMode;
+  rerouteCount: number;
+  flowMetrics: FlowMetric[];
+  linkEvents: LinkEvent[];
   updatedAt: string;
 }
 
@@ -92,9 +159,16 @@ export interface QueueMetricPoint {
   timestamp: number;
   elapsedSeconds: number;
   switchId: string;
+  portId: string;
   lsOccupancy: number;
   tsOccupancy: number;
   capacity: number;
+  lsQueueBytes: number;
+  tsQueueBytes: number;
+  lsDrops: number;
+  tsDrops: number;
+  transmitRateMbps: number;
+  transmittedPackets: number;
 }
 
 export interface ControllerQueueState {

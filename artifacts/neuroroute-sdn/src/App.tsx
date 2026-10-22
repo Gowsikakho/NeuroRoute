@@ -276,11 +276,19 @@ function Dashboard() {
   const [seed, setSeed] = useState(41);
   const [lsRate, setLsRate] = useState(50);
   const [tsRate, setTsRate] = useState(50);
+  const [speedMode, setSpeedMode] = useState<'fast' | 'realtime'>('realtime');
+  const [injectFailure, setInjectFailure] = useState(false);
+  const [failureLinkId, setFailureLinkId] = useState('');
+  const [failureDownSeconds, setFailureDownSeconds] = useState(30);
+  const [failureUpSeconds, setFailureUpSeconds] = useState(60);
   const [actionError, setActionError] = useState('');
   const [layoutResetVersion, setLayoutResetVersion] = useState(0);
   useEffect(() => { if (!topologyId && topologies.data?.length) setTopologyId(topologies.data[0].id); }, [topologies.data, topologyId]);
   useEffect(() => { if (!algorithm && algorithms.data?.length) setAlgorithm(algorithms.data.find(a => a.available)?.id || algorithms.data[0].id); }, [algorithms.data, algorithm]);
   const topology = topologies.data?.find(t => t.id === topologyId);
+  const selectedFailureLink = topology?.links.some(link => link.id === failureLinkId)
+    ? failureLinkId
+    : topology?.links[0]?.id || '';
   const running = sim.data?.status === 'running';
   const refresh = () => Promise.all([
     qc.invalidateQueries({ queryKey: getGetSimulationQueryKey() }),
@@ -290,7 +298,16 @@ function Dashboard() {
   const doAction = async (fn: () => Promise<unknown>) => { setActionError(''); try { await fn(); await refresh(); } catch (e) { setActionError(e instanceof Error ? e.message : 'Action could not be completed.'); } };
   const onStart = () => {
     if (!topologyId || !algorithm) return;
-    const data: SimulationStartInput = { topologyId, algorithm, durationSeconds: duration, seed, lsRate, tsRate };
+    const data: SimulationStartInput = {
+      topologyId, algorithm, durationSeconds: duration, seed, lsRate, tsRate, speedMode,
+      ...(injectFailure ? {
+        failureSchedule: {
+          linkId: selectedFailureLink,
+          downSeconds: failureDownSeconds,
+          upSeconds: failureUpSeconds,
+        },
+      } : {}),
+    };
     void doAction(() => start.mutateAsync({ data }));
   };
   return <main className="page">
@@ -314,10 +331,19 @@ function Dashboard() {
             <div className="run-status"><div className="status-name"><i className={`status-marker ${running ? 'running' : ''}`} />{statusLabel(sim.data?.status)}</div><div className="elapsed">{formatDuration(sim.data?.elapsedSeconds || 0)} / {formatDuration(sim.data?.durationSeconds || duration)}</div></div>
             <div className="control-grid">
               <div className="field"><label htmlFor="algorithm-select">Routing algorithm</label><select id="algorithm-select" value={algorithm} onChange={e => setAlgorithm(e.target.value)} disabled={!algorithms.data?.length} data-testid="select-algorithm">{(algorithms.data || []).map(a => <option value={a.id} key={a.id} disabled={!a.available}>{a.name}{a.available ? '' : ' · unavailable'}</option>)}</select></div>
-              <div className="field"><label htmlFor="run-duration">Duration · seconds</label><input id="run-duration" type="number" min="10" max="3600" value={duration} onChange={e => setDuration(Math.max(10, Math.min(3600, Number(e.target.value))))} data-testid="input-duration" /></div>
+              <div className="field"><label htmlFor="run-duration">Duration · seconds</label><input id="run-duration" type="number" min="10" max="3600" value={duration} onChange={e => { const next = Math.max(10, Math.min(3600, Number(e.target.value))); setDuration(next); if (failureDownSeconds >= next - 1) setFailureDownSeconds(next - 2); if (failureUpSeconds > next || failureUpSeconds <= failureDownSeconds) setFailureUpSeconds(next); }} data-testid="input-duration" /></div>
               <div className="field"><label htmlFor="run-seed">Random seed</label><input id="run-seed" type="number" value={seed} onChange={e => setSeed(Number(e.target.value))} data-testid="input-seed" /></div>
               <div className="field"><label htmlFor="ls-rate">LS traffic rate · %</label><input id="ls-rate" type="number" min="0" max="100" value={lsRate} onChange={e => setLsRate(Math.max(0, Math.min(100, Number(e.target.value))))} data-testid="input-ls-rate" /></div>
               <div className="field"><label htmlFor="ts-rate">TS traffic rate · %</label><input id="ts-rate" type="number" min="0" max="100" value={tsRate} onChange={e => setTsRate(Math.max(0, Math.min(100, Number(e.target.value))))} data-testid="input-ts-rate" /></div>
+              <div className="field"><label htmlFor="speed-mode">Simulation speed</label><select id="speed-mode" value={speedMode} onChange={e => setSpeedMode(e.target.value as 'fast' | 'realtime')} data-testid="select-speed-mode"><option value="fast">Fast · experiments</option><option value="realtime">Real time · live demo</option></select></div>
+            </div>
+            <div className="failure-controls">
+              <label className="failure-toggle"><input type="checkbox" checked={injectFailure} onChange={e => setInjectFailure(e.target.checked)} data-testid="toggle-link-failure" />Schedule a link failure</label>
+              {injectFailure && <div className="control-grid failure-fields">
+                <div className="field"><label htmlFor="failure-link">Link to take down</label><select id="failure-link" value={selectedFailureLink} onChange={e => setFailureLinkId(e.target.value)}>{(topology?.links || []).map(link => <option value={link.id} key={link.id}>{link.id}</option>)}</select></div>
+                <div className="field"><label htmlFor="failure-down">Link down at · seconds</label><input id="failure-down" type="number" min="0" max={duration - 2} value={failureDownSeconds} onChange={e => { const next = Math.min(Math.max(0, Number(e.target.value)), duration - 2); setFailureDownSeconds(next); if (failureUpSeconds <= next) setFailureUpSeconds(next + 1); }} /></div>
+                <div className="field"><label htmlFor="failure-up">Link up at · seconds</label><input id="failure-up" type="number" min={failureDownSeconds + 1} max={duration} value={failureUpSeconds} onChange={e => setFailureUpSeconds(Math.max(failureDownSeconds + 1, Math.min(duration, Number(e.target.value))))} /></div>
+              </div>}
             </div>
             <div className="actions">
               <button className="btn btn-primary" onClick={onStart} disabled={!topologyId || !algorithm || !algorithms.data?.find(a => a.id === algorithm)?.available || running || start.isPending} data-testid="button-start"><Play size={13} />{start.isPending ? 'Starting…' : 'Start simulation'}</button>
@@ -334,11 +360,19 @@ function Dashboard() {
             <div className="panel-body">
               <div className="info-row"><span className="info-label">Algorithm</span><span className="info-copy">{algorithms.data?.find(a => a.id === sim.data?.algorithm)?.name || sim.data?.algorithm || '—'}</span></div>
               <div className="info-row"><span className="info-label">Topology</span><span className="info-copy">{topologies.data?.find(t => t.id === sim.data?.topologyId)?.name || '—'}</span></div>
+              <div className="info-row"><span className="info-label">Simulation mode</span><span className="info-copy">{sim.data?.speedMode === 'fast' ? 'Fast experiment' : 'Real-time demo'}</span></div>
+              <div className="info-row"><span className="info-label">Reroutes</span><span className="info-copy">{sim.data?.rerouteCount ?? 0}</span></div>
+              <div className="info-row"><span className="info-label">Scheduled link events</span><span className="info-copy">{sim.data?.linkEvents?.length ? sim.data.linkEvents.map(event => `${event.linkId} ${event.status} @ ${event.elapsedSeconds}s`).join(' · ') : 'None'}</span></div>
               <div className="info-row"><span className="info-label">Last updated</span><span className="info-copy">{sim.data?.updatedAt ? new Date(sim.data.updatedAt).toLocaleString() : '—'}</span></div>
               <div className="info-row"><span className="info-label">State source</span><span className="info-copy">Local simulator API</span></div>
             </div>
           </Panel>
           <ControllerManagement />
+          <Panel title="Per-flow statistics" icon={Activity} meta="UPDATED EVERY SIMULATED SECOND" className="flow-metrics-panel">
+            <div className="panel-body" style={{ padding: 0 }}>
+              {sim.data?.flowMetrics?.length ? <div className="table-scroll"><table className="data-table" data-testid="table-flow-metrics"><thead><tr><th>Flow</th><th>Class</th><th>Route</th><th>Generated</th><th>Delivered</th><th>Dropped</th><th>Mean latency</th><th>Loss</th></tr></thead><tbody>{sim.data.flowMetrics.map(flow => <tr key={flow.flowId}><td className="mono">{flow.flowId}</td><td><span className="badge">{flow.trafficClass.toUpperCase()}</span></td><td className="mono">{flow.source} → {flow.destination}</td><td className="mono">{flow.generatedPackets}</td><td className="mono">{flow.deliveredPackets}</td><td className="mono">{flow.droppedPackets}</td><td className="mono">{flow.meanLatencyMs.toFixed(2)} ms</td><td className="mono">{flow.lossPercent.toFixed(3)}%</td></tr>)}</tbody></table></div> : <EmptyBlock title="No flow statistics yet" copy="Start a simulation to see per-flow latency, delivery, and packet loss." />}
+            </div>
+          </Panel>
         </div>
       </>
     )}
@@ -422,7 +456,10 @@ function SettingsPage() {
         <div className="info-row"><span className="info-label">Duration</span><span className="info-copy">10–3,600 seconds per run</span></div>
         <div className="info-row"><span className="info-label">Traffic rates</span><span className="info-copy">LS and TS inputs each accept 0–100%</span></div>
         <div className="info-row"><span className="info-label">Comparative batch</span><span className="info-copy">1–8 algorithms per experiment</span></div>
-        <div className="info-row"><span className="info-label">Reproducibility</span><span className="info-copy">Set a seed before submission; preserve topology, algorithm list and duration with recorded runs.</span></div>
+        <div className="info-row"><span className="info-label">Reproducibility</span><span className="info-copy">Per-flow random streams derive from the seed. Identical simulation inputs produce identical metric results.</span></div>
+        <div className="info-row"><span className="info-label">Traffic assumptions</span><span className="info-copy">LS uses bursty Poisson arrivals with 200-byte packets; TS uses constant-rate 1,500-byte packets. Each output port has separate 64 KiB LS and TS queues.</span></div>
+        <div className="info-row"><span className="info-label">Reroute assumption</span><span className="info-copy">Reactive baselines reroute at 80% occupancy. The proactive baseline forecasts two 1-second polling steps ahead. Route changes apply after a seeded random 50–200 ms rule-install delay.</span></div>
+        <div className="info-row"><span className="info-label">Stats & speed</span><span className="info-copy">Occupancy, queue drops, transmit rate, and per-flow latency/loss are sampled every simulated second. Experiments run fast; live demos can run in real time.</span></div>
       </div></Panel>
       <Panel title="Validation status" icon={CircleHelp} meta="RESEARCH BUILD"><div className="panel-body">
         <div className="run-status"><div className="status-name"><i className="status-marker" />Paper validation not supplied</div><span className="badge idle">UNVERIFIED</span></div>

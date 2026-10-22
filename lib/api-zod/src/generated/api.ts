@@ -71,6 +71,27 @@ export const GetSimulationResponse = zod.object({
   "averageLatencyMs": zod.number(),
   "throughputMbps": zod.number(),
   "packetLossPercent": zod.number(),
+  "droppedPackets": zod.number().int(),
+  "transmitRateMbps": zod.number(),
+  "speedMode": zod.enum(['fast', 'realtime']),
+  "rerouteCount": zod.number().int(),
+  "flowMetrics": zod.array(zod.object({
+  "flowId": zod.string(),
+  "trafficClass": zod.enum(['ls', 'ts']),
+  "source": zod.string(),
+  "destination": zod.string(),
+  "generatedPackets": zod.number().int(),
+  "deliveredPackets": zod.number().int(),
+  "droppedPackets": zod.number().int(),
+  "meanLatencyMs": zod.number(),
+  "lossPercent": zod.number(),
+  "reroutes": zod.number().int()
+})),
+  "linkEvents": zod.array(zod.object({
+  "linkId": zod.string(),
+  "status": zod.enum(['up', 'down']),
+  "elapsedSeconds": zod.number()
+})),
   "updatedAt": zod.coerce.date()
 })
 
@@ -87,6 +108,11 @@ export const startSimulationBodyLsRateMax = 100;
 export const startSimulationBodyTsRateMin = 0;
 export const startSimulationBodyTsRateMax = 100;
 
+export const startSimulationBodySpeedModeDefault = `realtime`;
+export const startSimulationBodyFailureScheduleOneDownSecondsMin = 0;
+
+export const startSimulationBodyFailureScheduleOneUpSecondsMin = 0;
+
 
 
 export const StartSimulationBody = zod.object({
@@ -95,7 +121,13 @@ export const StartSimulationBody = zod.object({
   "durationSeconds": zod.number().int().min(startSimulationBodyDurationSecondsMin).max(startSimulationBodyDurationSecondsMax),
   "seed": zod.number().int(),
   "lsRate": zod.number().min(startSimulationBodyLsRateMin).max(startSimulationBodyLsRateMax),
-  "tsRate": zod.number().min(startSimulationBodyTsRateMin).max(startSimulationBodyTsRateMax)
+  "tsRate": zod.number().min(startSimulationBodyTsRateMin).max(startSimulationBodyTsRateMax),
+  "speedMode": zod.enum(['fast', 'realtime']).default(startSimulationBodySpeedModeDefault),
+  "failureSchedule": zod.union([zod.object({
+  "linkId": zod.string(),
+  "downSeconds": zod.number().min(startSimulationBodyFailureScheduleOneDownSecondsMin),
+  "upSeconds": zod.number().min(startSimulationBodyFailureScheduleOneUpSecondsMin)
+}),zod.null()]).optional()
 })
 
 export const StartSimulationResponse = zod.object({
@@ -109,6 +141,27 @@ export const StartSimulationResponse = zod.object({
   "averageLatencyMs": zod.number(),
   "throughputMbps": zod.number(),
   "packetLossPercent": zod.number(),
+  "droppedPackets": zod.number().int(),
+  "transmitRateMbps": zod.number(),
+  "speedMode": zod.enum(['fast', 'realtime']),
+  "rerouteCount": zod.number().int(),
+  "flowMetrics": zod.array(zod.object({
+  "flowId": zod.string(),
+  "trafficClass": zod.enum(['ls', 'ts']),
+  "source": zod.string(),
+  "destination": zod.string(),
+  "generatedPackets": zod.number().int(),
+  "deliveredPackets": zod.number().int(),
+  "droppedPackets": zod.number().int(),
+  "meanLatencyMs": zod.number(),
+  "lossPercent": zod.number(),
+  "reroutes": zod.number().int()
+})),
+  "linkEvents": zod.array(zod.object({
+  "linkId": zod.string(),
+  "status": zod.enum(['up', 'down']),
+  "elapsedSeconds": zod.number()
+})),
   "updatedAt": zod.coerce.date()
 })
 
@@ -127,6 +180,27 @@ export const StopSimulationResponse = zod.object({
   "averageLatencyMs": zod.number(),
   "throughputMbps": zod.number(),
   "packetLossPercent": zod.number(),
+  "droppedPackets": zod.number().int(),
+  "transmitRateMbps": zod.number(),
+  "speedMode": zod.enum(['fast', 'realtime']),
+  "rerouteCount": zod.number().int(),
+  "flowMetrics": zod.array(zod.object({
+  "flowId": zod.string(),
+  "trafficClass": zod.enum(['ls', 'ts']),
+  "source": zod.string(),
+  "destination": zod.string(),
+  "generatedPackets": zod.number().int(),
+  "deliveredPackets": zod.number().int(),
+  "droppedPackets": zod.number().int(),
+  "meanLatencyMs": zod.number(),
+  "lossPercent": zod.number(),
+  "reroutes": zod.number().int()
+})),
+  "linkEvents": zod.array(zod.object({
+  "linkId": zod.string(),
+  "status": zod.enum(['up', 'down']),
+  "elapsedSeconds": zod.number()
+})),
   "updatedAt": zod.coerce.date()
 })
 
@@ -145,6 +219,27 @@ export const ResetSimulationResponse = zod.object({
   "averageLatencyMs": zod.number(),
   "throughputMbps": zod.number(),
   "packetLossPercent": zod.number(),
+  "droppedPackets": zod.number().int(),
+  "transmitRateMbps": zod.number(),
+  "speedMode": zod.enum(['fast', 'realtime']),
+  "rerouteCount": zod.number().int(),
+  "flowMetrics": zod.array(zod.object({
+  "flowId": zod.string(),
+  "trafficClass": zod.enum(['ls', 'ts']),
+  "source": zod.string(),
+  "destination": zod.string(),
+  "generatedPackets": zod.number().int(),
+  "deliveredPackets": zod.number().int(),
+  "droppedPackets": zod.number().int(),
+  "meanLatencyMs": zod.number(),
+  "lossPercent": zod.number(),
+  "reroutes": zod.number().int()
+})),
+  "linkEvents": zod.array(zod.object({
+  "linkId": zod.string(),
+  "status": zod.enum(['up', 'down']),
+  "elapsedSeconds": zod.number()
+})),
   "updatedAt": zod.coerce.date()
 })
 
@@ -166,9 +261,16 @@ export const GetQueueMetricsResponseItem = zod.object({
   "timestamp": zod.number(),
   "elapsedSeconds": zod.number(),
   "switchId": zod.string(),
+  "portId": zod.string(),
   "lsOccupancy": zod.number(),
   "tsOccupancy": zod.number(),
-  "capacity": zod.number()
+  "capacity": zod.number(),
+  "lsQueueBytes": zod.number().int(),
+  "tsQueueBytes": zod.number().int(),
+  "lsDrops": zod.number().int(),
+  "tsDrops": zod.number().int(),
+  "transmitRateMbps": zod.number(),
+  "transmittedPackets": zod.number().int()
 })
 export const GetQueueMetricsResponse = zod.array(GetQueueMetricsResponseItem)
 

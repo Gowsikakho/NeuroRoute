@@ -22,6 +22,16 @@ Paths used by the Python backend are built with `pathlib`. The simulator does no
 - Research model source for GAT-GRU occupancy forecasting, dueling Double-DQN, and LSTM/Chebyshev-GCN baselines. Install `backend/requirements-ml.txt` when PyTorch and PyTorch Geometric are needed.
 - A Ryu REST adapter is provided for optional WSL2 use. It requires a separately configured Mininet/Ryu environment and has not been validated against a particular Ryu/QoS plugin version.
 
+## Simulator model assumptions
+
+- Every directed output port has two independent FIFO queues: latency-sensitive (LS) and throughput-sensitive (TS). Each queue has a 64 KiB byte capacity and a token-bucket service rate. The controller can change the LS/TS service-rate split while a run is active.
+- LS traffic consists of 200-byte packets arriving as a Poisson process during alternating exponential on/off bursts. TS traffic is constant bit rate with 1,500-byte packets. Each flow has a deterministic random stream derived from the run seed and flow ID.
+- Congestion is sampled once per simulated second. Reactive baselines reroute when a path queue reaches 80% occupancy. The proactive threshold baseline forecasts two polling steps ahead (k = 2) and begins rerouting when that projection reaches the threshold. Every route installation takes effect after a seeded random delay uniformly sampled from 50–200 ms. This is a modeling assumption, not a measured controller timing guarantee.
+- Optional link failures are scheduled by simulated time. The selected link is taken down and restored at the configured times; active flows using it compute a route that excludes the failed link, with the same rule-installation delay.
+- Each one-second sample includes per-port LS/TS occupancy, queue drops, byte capacities, and transmit rate. Simulation state also reports per-flow delivered/dropped packet counts, mean latency, and loss.
+- Fast mode advances simulated time as quickly as possible and is intended for experiments. Real-time mode advances at approximately one simulated second per wall-clock second for live demonstrations.
+- Numeric simulation results are deterministic for the same topology, algorithm, duration, rates, failure schedule, and seed. Run IDs and wall-clock timestamps are metadata and are not expected to repeat.
+
 ## Research-paper fidelity
 
 The attached brief referenced a paper's Eq. 3, Algorithm 1, and a dashboard page list, but did not include the paper or the page list. The current app therefore does **not** claim exact reproduction of the paper. `preprocessing.py` contains generic timing-indicator and tanh-normalization helpers; their constants and precise definitions must be checked against the paper. The live simulator exposes static Dijkstra, ECMP, and tabular Q-learning. D3QN, LSTM-Q-learning, and Chebyshev-GCN-DQN are listed as unavailable until their paper-specific training/integration work is completed.
@@ -38,10 +48,12 @@ Run `pwsh -File artifacts/neuroroute-sdn/scripts/run_all.ps1` from the project r
 
 ## Tests
 
-From `artifacts/neuroroute-sdn/backend`, run:
+From the workspace root, run:
 
-```powershell
-py -3.11 -m unittest discover -s tests -v
+```sh
+uv run --project . --directory artifacts/neuroroute-sdn/backend pytest
 ```
+
+The pytest suite includes a seeded M/M/1 queue check against the theoretical mean delay `1 / (service rate - arrival rate)` with a 5% tolerance.
 
 For the frontend, run `pnpm --filter @workspace/neuroroute-sdn run typecheck` from the project root.

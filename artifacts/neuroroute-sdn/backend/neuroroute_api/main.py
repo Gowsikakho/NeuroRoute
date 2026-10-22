@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from datetime import datetime, timezone
+from typing import Literal
 
 from fastapi import APIRouter, FastAPI, HTTPException, Query, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
@@ -32,6 +33,12 @@ app.add_middleware(
 api = APIRouter(prefix="/api")
 
 
+class FailureScheduleInput(BaseModel):
+    linkId: str
+    downSeconds: float = Field(ge=0)
+    upSeconds: float = Field(gt=0)
+
+
 class SimulationStartInput(BaseModel):
     topologyId: str
     algorithm: str
@@ -39,6 +46,8 @@ class SimulationStartInput(BaseModel):
     seed: int
     lsRate: float = Field(ge=0, le=100)
     tsRate: float = Field(ge=0, le=100)
+    speedMode: Literal["fast", "realtime"] = "realtime"
+    failureSchedule: FailureScheduleInput | None = None
 
 
 class ExperimentInput(BaseModel):
@@ -102,6 +111,8 @@ def start_simulation(config: SimulationStartInput) -> dict:
             config.seed,
             config.lsRate,
             config.tsRate,
+            config.speedMode,
+            config.failureSchedule.model_dump() if config.failureSchedule else None,
         )
     except RuntimeError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
