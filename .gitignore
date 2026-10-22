@@ -3,6 +3,13 @@
 # compiled output
 dist
 tmp
+__pycache__/
+*.py[cod]
+.pythonlibs/
+.pytest_cache/
+artifacts/neuroroute-sdn/backend/data/
+artifacts/neuroroute-sdn/backend/models/*.pt
+artifacts/neuroroute-sdn/generated-artifacts/
 out-tsc
 *.tsbuildinfo
 .expo

@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "NeuroRoute SDN"
+description = "An interactive SDN research simulator for exploring proactive routing, switch queue occupancy, traffic classes, and experiment results. Designed around a Windows-native Python backend with a browser dashboard."
+version = "1.0.0"
+id = "artifacts/neuroroute-sdn"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 24469
+
+[services.development]
+run = "pnpm --filter @workspace/neuroroute-sdn run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/neuroroute-sdn", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/neuroroute-sdn/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24469"
+BASE_PATH = "/"

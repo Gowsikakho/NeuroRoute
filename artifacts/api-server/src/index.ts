@@ -1,5 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { startPythonBackend, proxyPythonWebSocket } from "./lib/python-backend";
 
 const rawPort = process.env["PORT"];
 
@@ -15,11 +16,21 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-app.listen(port, (err) => {
+const pythonBackend = startPythonBackend();
+const server = app.listen(port, (err) => {
   if (err) {
     logger.error({ err }, "Error listening on port");
+    pythonBackend.kill();
     process.exit(1);
   }
 
   logger.info({ port }, "Server listening");
 });
+proxyPythonWebSocket(server);
+
+const shutdown = () => {
+  pythonBackend.kill();
+  server.close();
+};
+process.on("SIGTERM", shutdown);
+process.on("SIGINT", shutdown);

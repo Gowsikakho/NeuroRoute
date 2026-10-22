@@ -1,36 +1,43 @@
-# [Project name]
+# NeuroRoute-SDN
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+Windows-first SDN research simulator with a SimPy/FastAPI backend and a live React dashboard for topologies, queue metrics, controller state, and experiments.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- `pnpm --filter @workspace/api-server run dev` — run the shared API proxy
+- `pnpm --filter @workspace/neuroroute-sdn run dev` — run the NeuroRoute dashboard
+- `py -3.11 -m uvicorn neuroroute_api.main:app --app-dir artifacts/neuroroute-sdn/backend --port 8000` — run the native Python API from the workspace root
+- `pwsh -File artifacts/neuroroute-sdn/scripts/run_all.ps1` — run the built-in experiment suite and export CSV/SVG charts
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- Required env: none for the local simulator; runtime data is stored in SQLite
 
 ## Stack
 
 - pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
+- API: Python 3.11 FastAPI; Express 5 proxies hosted preview requests
+- DB: SQLite + SQLAlchemy for simulator experiments and queue samples
 - Validation: Zod (`zod/v4`), `drizzle-zod`
 - API codegen: Orval (from OpenAPI spec)
 - Build: esbuild (CJS bundle)
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/neuroroute-sdn/backend/neuroroute_api` — Python API, simulator, storage, controller, topology, and optional research models
+- `artifacts/neuroroute-sdn/src` — React dashboard
+- `lib/api-spec/openapi.yaml` — REST API contract
+- `artifacts/neuroroute-sdn/backend/data` — local SQLite data (ignored by Git)
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- The native Python FastAPI backend is the product's primary runtime. The shared Express API process only proxies `/api` and WebSocket traffic to it in the hosted preview.
+- The default SimPy backend is self-contained; Mininet/Ryu is an optional WSL2 adapter, not a runtime requirement.
+- Research-paper-specific equations and Algorithm 1 are not asserted until the source paper is supplied.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+The dashboard can start and control SimPy runs, display topology and queue metrics, inspect simulated controller state, install queue-rate/flow-table changes, and compare saved experiments.
 
 ## User preferences
 

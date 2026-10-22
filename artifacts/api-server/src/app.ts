@@ -3,6 +3,7 @@ import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { proxyPythonRequest } from "./lib/python-backend";
 
 const app: Express = express();
 
@@ -30,5 +31,13 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
+app.use("/api", async (req, res): Promise<void> => {
+  try {
+    await proxyPythonRequest(req, res);
+  } catch (err) {
+    req.log.error({ err }, "NeuroRoute API proxy failed");
+    res.status(502).json({ error: "NeuroRoute simulator is unavailable." });
+  }
+});
 
 export default app;
