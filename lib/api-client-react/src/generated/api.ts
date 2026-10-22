@@ -28,6 +28,7 @@ import type {
   Algorithm,
   ControllerState,
   Experiment,
+  ExperimentBaselineRun,
   ExperimentInput,
   FlowRule,
   FlowRuleInput,
@@ -1183,6 +1184,107 @@ export function useGetExperiments<TData = Awaited<ReturnType<typeof getExperimen
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getGetExperimentsQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetExperimentBaselinesUrl = () => {
+
+
+
+
+  return `/api/experiments/baselines`
+}
+
+/**
+ * @summary Read the static and ECMP baseline CSV results
+ */
+export const getExperimentBaselines = async ( options?: Parameters<typeof customFetch>[1]): Promise<ExperimentBaselineRun[]> => {
+
+  return customFetch<ExperimentBaselineRun[]>(getGetExperimentBaselinesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetExperimentBaselinesQueryKey = () => {
+    return [
+    `/api/experiments/baselines`
+    ] as const;
+    }
+
+
+export const getGetExperimentBaselinesQueryOptions = <TData = Awaited<ReturnType<typeof getExperimentBaselines>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getExperimentBaselines>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetExperimentBaselinesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getExperimentBaselines>>> = ({ signal }) => getExperimentBaselines({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getExperimentBaselines>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetExperimentBaselinesQueryResult = NonNullable<Awaited<ReturnType<typeof getExperimentBaselines>>>
+export type GetExperimentBaselinesQueryError = ErrorType<unknown>
+
+
+export function useGetExperimentBaselines<TData = Awaited<ReturnType<typeof getExperimentBaselines>>, TError = ErrorType<unknown>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getExperimentBaselines>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getExperimentBaselines>>,
+          TError,
+          Awaited<ReturnType<typeof getExperimentBaselines>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetExperimentBaselines<TData = Awaited<ReturnType<typeof getExperimentBaselines>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getExperimentBaselines>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getExperimentBaselines>>,
+          TError,
+          Awaited<ReturnType<typeof getExperimentBaselines>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetExperimentBaselines<TData = Awaited<ReturnType<typeof getExperimentBaselines>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getExperimentBaselines>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Read the static and ECMP baseline CSV results
+ */
+
+export function useGetExperimentBaselines<TData = Awaited<ReturnType<typeof getExperimentBaselines>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getExperimentBaselines>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetExperimentBaselinesQueryOptions(options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

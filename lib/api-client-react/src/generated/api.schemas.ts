@@ -280,6 +280,22 @@ export interface Experiment {
   results: ExperimentResult[];
 }
 
+export interface ExperimentBaselineRun {
+  run_id: string;
+  topology: string;
+  scenario: string;
+  algorithm: string;
+  seed: number;
+  ls_latency_ms: number;
+  ts_latency_ms: number;
+  ls_loss_pct: number;
+  ts_loss_pct: number;
+  qos_satisfied_pct: number;
+  reroutes: number;
+  proactive_reroutes: number;
+  reactive_reroutes: number;
+}
+
 export type GetQueueMetricsParams = {
 /**
  * @minimum 10

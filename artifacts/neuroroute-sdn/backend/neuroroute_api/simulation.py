@@ -62,14 +62,14 @@ ALGORITHM_CATALOG = [
         "id": "static-dijkstra",
         "name": "Static Dijkstra",
         "family": "classical",
-        "description": "Shortest path selected by configured link delay; congestion reroutes are reactive.",
+        "description": "Shortest path by hop count; congestion reroutes are reactive.",
         "available": True,
     },
     {
         "id": "ecmp",
         "name": "ECMP",
         "family": "classical",
-        "description": "Seeded selection among equal-cost shortest paths; congestion reroutes are reactive.",
+        "description": "Flow-hash selection among equal-hop shortest paths; congestion reroutes are reactive.",
         "available": True,
     },
     {
@@ -232,7 +232,7 @@ class SimulationManager(NetworkBackend):
             delay = float(topology.delay_ms + ((index * 7) % 18))
             attributes = {
                 "delay": delay,
-                "weight": delay,
+                "weight": 1.0,
                 "id": link_id,
             }
             self._edge_attributes[link_id] = attributes
@@ -483,25 +483,13 @@ class SimulationManager(NetworkBackend):
                 source, target = port_id.split(":", 1)
                 if graph.has_edge(source, target):
                     graph.remove_edge(source, target)
-        try:
-            if self._state.get("algorithm") == "ecmp":
-                paths = list(
-                    nx.all_shortest_paths(
-                        graph,
-                        flow.source,
-                        flow.destination,
-                        weight="weight",
-                    )
-                )
-                return flow.random_source.choice(paths)
-            return nx.shortest_path(
-                graph,
-                flow.source,
-                flow.destination,
-                weight="weight",
-            )
-        except (nx.NetworkXNoPath, nx.NodeNotFound):
-            return []
+        algorithm = self._routing_algorithm or create_routing_algorithm("static")
+        return algorithm.select_path(
+            graph,
+            flow.flow_id,
+            flow.source,
+            flow.destination,
+        )
 
     def _failure_process(self, schedule: dict) -> Iterator[simpy.Event]:
         environment = self._environment
@@ -1109,6 +1097,8 @@ class SimulationManager(NetworkBackend):
         algorithm: str,
         duration_seconds: int,
         seed: int,
+        ls_rate: float = 35,
+        ts_rate: float = 50,
     ) -> dict:
         runner = cls(persist=False)
         runner._configure(
@@ -1116,8 +1106,8 @@ class SimulationManager(NetworkBackend):
             algorithm,
             duration_seconds,
             seed,
-            35,
-            50,
+            ls_rate,
+            ts_rate,
             speed_mode="fast",
         )
         environment = runner._environment
@@ -1126,6 +1116,58 @@ class SimulationManager(NetworkBackend):
         environment.run(until=duration_seconds + 0.00001)
         runner._state["status"] = "completed"
         runner._state["activeFlows"] = 0
+        flow_metrics = runner._flow_metrics()
+        class_flow_metrics = {
+            traffic_class: [
+                metric
+                for metric in flow_metrics
+                if metric["trafficClass"] == traffic_class
+            ]
+            for traffic_class in ("ls", "ts")
+        }
+
+        def class_latency(traffic_class: str) -> float:
+            flows = class_flow_metrics[traffic_class]
+            delivered = sum(flow["deliveredPackets"] for flow in flows)
+            latency_sum = sum(
+                runner._flows_by_id[flow["flowId"]].latency_sum_ms
+                for flow in flows
+            )
+            return round(latency_sum / delivered, 3) if delivered else 0.0
+
+        def class_loss(traffic_class: str) -> float:
+            flows = class_flow_metrics[traffic_class]
+            generated = sum(flow["generatedPackets"] for flow in flows)
+            dropped = sum(flow["droppedPackets"] for flow in flows)
+            return round(dropped * 100 / generated, 4) if generated else 0.0
+
+        qos_satisfied = 0
+        for flow in runner._flows:
+            generated = flow.generated_packets
+            delivered = flow.delivered_packets
+            loss_pct = (
+                flow.dropped_packets * 100 / generated if generated else 0.0
+            )
+            if flow.traffic_class == "ls":
+                latency_ms = (
+                    flow.latency_sum_ms / delivered if delivered else 0.0
+                )
+                satisfies_qos = latency_ms <= 50 and loss_pct <= 1
+            else:
+                offered_mbps = (
+                    flow.arrival_rate_pps * flow.packet_bytes * 8 / 1_000_000
+                )
+                delivered_mbps = (
+                    delivered * flow.packet_bytes * 8
+                    / max(duration_seconds, 1)
+                    / 1_000_000
+                )
+                satisfies_qos = (
+                    delivered_mbps >= offered_mbps * 0.95
+                    and loss_pct <= 1
+                )
+            qos_satisfied += int(satisfies_qos)
+
         queue_occupancy = [
             point["lsOccupancy"] + point["tsOccupancy"]
             for point in runner._metrics
@@ -1144,6 +1186,17 @@ class SimulationManager(NetworkBackend):
             )
             if queue_occupancy
             else 0.0,
+            "lsLatencyMs": class_latency("ls"),
+            "tsLatencyMs": class_latency("ts"),
+            "lsLossPct": class_loss("ls"),
+            "tsLossPct": class_loss("ts"),
+            "qosSatisfiedPct": round(
+                qos_satisfied * 100 / len(runner._flows), 2
+            )
+            if runner._flows
+            else 0.0,
+            "reroutes": runner._reroute_count,
+            "flowMetrics": flow_metrics,
         }
 
 

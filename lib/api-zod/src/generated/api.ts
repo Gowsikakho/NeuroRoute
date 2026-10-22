@@ -366,6 +366,27 @@ export const GetExperimentsResponse = zod.array(GetExperimentsResponseItem)
 
 
 /**
+ * @summary Read the static and ECMP baseline CSV results
+ */
+export const GetExperimentBaselinesResponseItem = zod.object({
+  "run_id": zod.string(),
+  "topology": zod.string(),
+  "scenario": zod.string(),
+  "algorithm": zod.string(),
+  "seed": zod.number().int(),
+  "ls_latency_ms": zod.number(),
+  "ts_latency_ms": zod.number(),
+  "ls_loss_pct": zod.number(),
+  "ts_loss_pct": zod.number(),
+  "qos_satisfied_pct": zod.number(),
+  "reroutes": zod.number().int(),
+  "proactive_reroutes": zod.number().int(),
+  "reactive_reroutes": zod.number().int()
+})
+export const GetExperimentBaselinesResponse = zod.array(GetExperimentBaselinesResponseItem)
+
+
+/**
  * @summary Run a comparative experiment
  */
 export const runExperimentBodyDurationSecondsMin = 10;

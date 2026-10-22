@@ -15,11 +15,13 @@ Paths used by the Python backend are built with `pathlib`. The simulator does no
 
 - NSFNET (14 nodes), Abilene (11 nodes), and a 7-switch demo topology.
 - SimPy-driven latency-sensitive Poisson traffic and throughput-sensitive constant-rate traffic.
+- Static Dijkstra and ECMP use unit hop cost on the baselines; ECMP hashes each flow onto one of the equal-hop shortest paths.
 - Static Dijkstra and seeded ECMP route selection, plus a tabular Q-learning LS/TS service-rate controller.
 - Simulated OpenFlow-style flow tables, port counters, queue rates, flow-rule installation, and a WebSocket stream at `/api/ws/simulation`.
 - A pluggable routing control loop with live mode selection: `GET /api/mode` lists registered modes and `POST /api/mode` accepts `{"mode":"static"}` or `{"mode":"ecmp"}`. A simulation start request may omit `algorithm` to use the selected mode.
 - Queue occupancy time-series capture and SQLite persistence.
 - Comparative baseline runs saved to SQLite, with CSV and SVG exports from `scripts/run_all.ps1`.
+- E1 normal-load baseline runs for static Dijkstra and ECMP, recorded per seed in `experiments/results/runs.csv`.
 - Research model source for GAT-GRU occupancy forecasting, dueling Double-DQN, and LSTM/Chebyshev-GCN baselines. Install `backend/requirements-ml.txt` when PyTorch and PyTorch Geometric are needed.
 - A Ryu REST adapter is provided for optional WSL2 use. It requires a separately configured Mininet/Ryu environment and has not been validated against a particular Ryu/QoS plugin version.
 
@@ -46,6 +48,17 @@ After running a simulation long enough to collect queue samples, train the GAT-G
 ## Experiment exports
 
 Run `pwsh -File artifacts/neuroroute-sdn/scripts/run_all.ps1` from the project root. It compares each enabled algorithm on each built-in topology and writes `experiment-results.csv` plus SVG charts under `artifacts/neuroroute-sdn/generated-artifacts/`. Generated files and the local SQLite database are ignored by Git.
+
+Run the focused E1 baseline batch from the project root with:
+
+```sh
+cd artifacts/neuroroute-sdn/backend
+PYTHONPATH=. uv run --project ../../.. python -m neuroroute_api.run_baselines
+```
+
+E1 is the 7-switch `demo-7` topology at the simulator's normal-load settings (30 simulated seconds, LS rate 35%, TS rate 50%), with seeds 1–10 for each algorithm. The command writes 20 rows to `experiments/results/runs.csv`. Both routing baselines use unit hop cost so ECMP can use the equal-hop alternatives in this topology. Latencies and loss are packet-weighted within each traffic class. QoS satisfaction is the percentage of the eight flows that meet the class target: LS mean latency ≤50 ms and loss ≤1%; TS delivered rate ≥95% of offered rate and loss ≤1%. Static and ECMP reroutes are classified as reactive; this scenario has no proactive algorithm.
+
+The dashboard's **Baseline results** page reads this CSV through `/api/experiments/baselines`.
 
 ## Tests
 

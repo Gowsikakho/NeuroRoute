@@ -20,6 +20,16 @@ class RoutingAlgorithm(ABC):
     """A routing policy that maps an observed network state to per-flow decisions."""
 
     @abstractmethod
+    def select_path(
+        self,
+        graph: nx.Graph,
+        flow_id: str,
+        source: str,
+        destination: str,
+    ) -> list[str]:
+        raise NotImplementedError
+
+    @abstractmethod
     def decide(self, state: dict) -> dict[str, FlowDecision]:
         raise NotImplementedError
 
@@ -35,45 +45,78 @@ def _graph_from_state(state: dict) -> nx.Graph:
             link["source"],
             link["target"],
             delay=float(link.get("delayMs", 1.0)),
-            weight=float(link.get("delayMs", 1.0)),
+            weight=1.0,
         )
     return graph
 
 
 class StaticRoutingAlgorithm(RoutingAlgorithm):
-    """Select shortest-delay routes and preserve the default LS/TS split."""
+    """Select a minimum-hop route and preserve the default LS/TS split."""
+
+    def select_path(
+        self,
+        graph: nx.Graph,
+        flow_id: str,
+        source: str,
+        destination: str,
+    ) -> list[str]:
+        del flow_id
+        try:
+            return nx.shortest_path(graph, source, destination, weight="weight")
+        except (nx.NetworkXNoPath, nx.NodeNotFound):
+            return []
 
     def decide(self, state: dict) -> dict[str, FlowDecision]:
         graph = _graph_from_state(state)
         decisions: dict[str, FlowDecision] = {}
         for flow in state.get("flows", []):
-            try:
-                path = nx.shortest_path(
-                    graph, flow["source"], flow["destination"], weight="weight"
-                )
-            except (nx.NetworkXNoPath, nx.NodeNotFound):
-                path = []
+            path = self.select_path(
+                graph,
+                flow["flowId"],
+                flow["source"],
+                flow["destination"],
+            )
             decisions[flow["flowId"]] = FlowDecision(path=path, queue_rate=0.62)
         return decisions
 
 
 class EcmpRoutingAlgorithm(RoutingAlgorithm):
-    """Select deterministically among equal-delay shortest paths."""
+    """Hash each flow onto a deterministic equal-minimum-delay path."""
+
+    def select_path(
+        self,
+        graph: nx.Graph,
+        flow_id: str,
+        source: str,
+        destination: str,
+    ) -> list[str]:
+        try:
+            paths = sorted(
+                tuple(path)
+                for path in nx.all_shortest_paths(
+                    graph,
+                    source,
+                    destination,
+                    weight="weight",
+                )
+            )
+        except (nx.NetworkXNoPath, nx.NodeNotFound):
+            return []
+        if not paths:
+            return []
+        digest = hashlib.sha256(flow_id.encode("utf-8")).digest()
+        return list(paths[int.from_bytes(digest[:8], "big") % len(paths)])
 
     def decide(self, state: dict) -> dict[str, FlowDecision]:
         graph = _graph_from_state(state)
         decisions: dict[str, FlowDecision] = {}
         for flow in state.get("flows", []):
-            try:
-                paths = list(
-                    nx.all_shortest_paths(
-                        graph, flow["source"], flow["destination"], weight="weight"
-                    )
-                )
-                digest = hashlib.sha256(flow["flowId"].encode("utf-8")).digest()
-                path = paths[int.from_bytes(digest[:8], "big") % len(paths)]
-            except (nx.NetworkXNoPath, nx.NodeNotFound):
-                path = []
+            path = self.select_path(
+                graph,
+                flow["flowId"],
+                flow["source"],
+                flow["destination"],
+            )
             decisions[flow["flowId"]] = FlowDecision(path=path, queue_rate=0.62)
         return decisions
 
@@ -92,14 +135,14 @@ ALGORITHM_REGISTRY: dict[str, AlgorithmRegistration] = {
         "static",
         StaticRoutingAlgorithm,
         "Static shortest path",
-        "Shortest path selected by configured link delay.",
+        "Shortest path with unit cost per link (fewest hops).",
         True,
     ),
     "ecmp": AlgorithmRegistration(
         "ecmp",
         EcmpRoutingAlgorithm,
         "ECMP",
-        "Deterministic selection among equal-cost shortest paths.",
+        "Deterministic selection among equal-hop shortest paths.",
         True,
     ),
     "lstm_ql": AlgorithmRegistration(

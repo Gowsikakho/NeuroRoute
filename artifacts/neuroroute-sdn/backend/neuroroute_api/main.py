@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from starlette.websockets import WebSocketDisconnect
 
+from .baseline_results import load_baseline_runs
 from .simulation import ALGORITHM_CATALOG, AVAILABLE_ALGORITHMS, SimulationManager, simulation
 from .storage import (
     initialize_storage,
@@ -189,6 +190,19 @@ def install_flow_rule(config: FlowRuleInput) -> dict:
 @api.get("/experiments")
 def get_experiments() -> list[dict]:
     return load_experiments()
+
+
+@api.get("/experiments/baselines")
+def get_experiment_baselines() -> list[dict]:
+    try:
+        return load_baseline_runs()
+    except FileNotFoundError as error:
+        raise HTTPException(
+            status_code=404,
+            detail="Baseline CSV is not available yet. Run the E1 baseline suite first.",
+        ) from error
+    except ValueError as error:
+        raise HTTPException(status_code=500, detail=str(error)) from error
 
 
 @api.post("/experiments/run")

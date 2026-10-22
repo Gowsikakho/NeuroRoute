@@ -3,12 +3,18 @@ from __future__ import annotations
 import math
 import unittest
 
+import networkx as nx
+
 from neuroroute_api.preprocessing import dense_timing_indicator, tanh_normalize
 from neuroroute_api.controller import SimulatedOpenFlowController
 from neuroroute_api.queue_agent import QueueRateQLearningAgent
 from neuroroute_api.queue_model import QUEUE_CAPACITY_BYTES, OutputPortQueue, Packet
 from neuroroute_api.network_backend import NetworkBackend
-from neuroroute_api.routing import ALGORITHM_REGISTRY, StaticRoutingAlgorithm
+from neuroroute_api.routing import (
+    ALGORITHM_REGISTRY,
+    EcmpRoutingAlgorithm,
+    StaticRoutingAlgorithm,
+)
 from neuroroute_api.simulation import AVAILABLE_ALGORITHMS, SimulationManager
 from neuroroute_api.topologies import TOPOLOGIES
 
@@ -60,6 +66,36 @@ class SimulationTests(unittest.TestCase):
             {"static", "ecmp", "lstm_ql", "gcn_dqn", "gat_d3qn"},
         )
         self.assertIsInstance(ALGORITHM_REGISTRY["static"].factory(), StaticRoutingAlgorithm)
+
+    def test_static_dijkstra_prefers_fewest_hops(self) -> None:
+        graph = nx.Graph()
+        graph.add_edge("s0", "s1", weight=1)
+        graph.add_edge("s0", "s2", weight=1)
+        graph.add_edge("s2", "s3", weight=1)
+        graph.add_edge("s3", "s1", weight=1)
+
+        path = StaticRoutingAlgorithm().select_path(graph, "flow-a", "s0", "s1")
+
+        self.assertEqual(path, ["s0", "s1"])
+
+    def test_ecmp_hash_is_stable_and_spreads_equal_cost_flows(self) -> None:
+        graph = nx.Graph()
+        graph.add_edge("s0", "s1", weight=1)
+        graph.add_edge("s1", "s3", weight=1)
+        graph.add_edge("s0", "s2", weight=1)
+        graph.add_edge("s2", "s3", weight=1)
+        algorithm = EcmpRoutingAlgorithm()
+
+        paths = {
+            tuple(algorithm.select_path(graph, f"flow-{index}", "s0", "s3"))
+            for index in range(40)
+        }
+
+        self.assertEqual(len(paths), 2)
+        self.assertEqual(
+            algorithm.select_path(graph, "flow-7", "s0", "s3"),
+            algorithm.select_path(graph, "flow-7", "s0", "s3"),
+        )
 
     def test_static_control_loop_runs_and_switches_modes(self) -> None:
         runner = SimulationManager(persist=False)

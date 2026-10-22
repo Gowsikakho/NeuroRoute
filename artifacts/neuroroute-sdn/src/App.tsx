@@ -6,7 +6,7 @@ import { applyNodeChanges, Background, BackgroundVariant, Controls, MarkerType, 
 import '@xyflow/react/dist/style.css';
 import {
   getGetAlgorithmsQueryKey, getGetControllerStateQueryKey, getGetExperimentsQueryKey, getGetQueueMetricsQueryKey, getGetSimulationQueryKey, getGetTopologiesQueryKey,
-  useGetAlgorithms, useGetExperiments, useGetQueueMetrics, useGetSimulation, useGetTopologies,
+  useGetAlgorithms, useGetExperimentBaselines, useGetExperiments, useGetQueueMetrics, useGetSimulation, useGetTopologies,
   useGetControllerState, useInstallFlowRule, useInstallQueueRate, useResetSimulation, useRunExperiment, useStartSimulation, useStopSimulation,
 } from '@workspace/api-client-react';
 import type { Algorithm, ExperimentInput, QueueMetricPoint, SimulationStartInput, SimulationState, Topology } from '@workspace/api-client-react';
@@ -19,6 +19,7 @@ const queryClient = new QueryClient({ defaultOptions: { queries: { retry: 1, ref
 const navItems = [
   { href: '/', label: 'Simulation', icon: Activity },
   { href: '/experiments', label: 'Experiments', icon: GitCompareArrows },
+  { href: '/baselines', label: 'Baseline results', icon: Gauge },
   { href: '/algorithms', label: 'Algorithms', icon: Waypoints },
   { href: '/settings', label: 'Settings & setup', icon: Settings2 },
 ];
@@ -107,15 +108,15 @@ function TopologyView({ topology, resetVersion }: { topology?: Topology; resetVe
   const maxUtilization = Math.max(0, ...links.map(link => link.utilization));
   const graphEdges: Edge[] = links.map(link => {
     const relativeLoad = maxUtilization > 0 ? link.utilization / maxUtilization : 0;
-    const color = relativeLoad >= 0.75 ? '#c88d47' : relativeLoad >= 0.4 ? '#6f9c83' : '#a9b9ad';
+    const color = relativeLoad >= 0.75 ? '#d4a72c' : relativeLoad >= 0.4 ? '#8a7590' : '#c2cbd4';
     return {
       id: link.id,
       source: link.source,
       target: link.target,
       label: String(link.utilization),
       labelShowBg: true,
-      labelBgStyle: { fill: '#f7f6ef', fillOpacity: 0.94 },
-      labelStyle: { fill: '#63746b', fontSize: 9, fontFamily: 'DM Mono, monospace' },
+      labelBgStyle: { fill: '#ffffff', fillOpacity: 0.96 },
+      labelStyle: { fill: '#57495e', fontSize: 10, fontFamily: 'ui-monospace, monospace' },
       style: { stroke: color, strokeWidth: 1.3 + relativeLoad * 1.4 },
       markerEnd: { type: MarkerType.ArrowClosed, color, width: 12, height: 12 },
     };
@@ -159,7 +160,7 @@ function QueueChart({ points, loading, error, retry }: { points?: QueueMetricPoi
   return <div className="chart-wrap" data-testid="queue-chart"><svg className="chart-svg" viewBox="0 0 560 175" preserveAspectRatio="none">
     {[28, 68, 108, 150].map(yv => <line key={yv} className="chart-grid" x1="38" x2="538" y1={yv} y2={yv} />)}
     <text className="chart-label" x="2" y="31">{max.toFixed(1)}</text><text className="chart-label" x="16" y="153">0</text>
-    <path d={path('ls')} fill="none" stroke="#428d74" strokeWidth="2.2" strokeLinejoin="round" /><path d={path('ts')} fill="none" stroke="#d89d56" strokeWidth="2.2" strokeLinejoin="round" />
+    <path d={path('ls')} fill="none" stroke="#745c7c" strokeWidth="2.2" strokeLinejoin="round" /><path d={path('ts')} fill="none" stroke="#d4a72c" strokeWidth="2.2" strokeLinejoin="round" />
     {samples.length > 1 && <><text className="chart-label" x="38" y="170">{samples[0][0]}s</text><text className="chart-label" x="508" y="170">{samples[samples.length - 1][0]}s</text></>}
   </svg></div>;
 }
@@ -427,6 +428,50 @@ function ExperimentsPage() {
   </main>;
 }
 
+function BaselineResultsPage() {
+  const runs = useGetExperimentBaselines();
+  return <main className="page">
+    <PageHead
+      eyebrow="03 / Baseline evaluation"
+      title="Baseline results"
+      subtitle="Seeded E1 normal-load runs on the 7-switch topology. Each row is one simulator run."
+      right={<div className="status-line"><Gauge size={14} />{runs.data?.length ?? 0} RUNS</div>}
+    />
+    <Panel title="E1 · Normal load" icon={Gauge} meta={`${runs.data?.length ?? 0} RECORDED RUNS`}>
+      <div className="panel-body baseline-method">
+        <p>Static Dijkstra and ECMP, seeds 1–10. QoS satisfaction is the share of flows meeting their class target: LS latency at or below 50 ms with at most 1% loss; TS delivered throughput at least 95% of offered rate with at most 1% loss.</p>
+      </div>
+      {runs.isLoading ? <LoadingBlock lines={5} /> : runs.isError ?
+        <div className="panel-body"><ErrorBlock retry={() => void runs.refetch()} message="Baseline results could not be read from the experiment CSV." /></div> :
+        !runs.data?.length ? <EmptyBlock title="No baseline rows found" copy="Generate the E1 static Dijkstra and ECMP runs to populate experiments/results/runs.csv." /> :
+          <div className="table-scroll">
+            <table className="data-table baseline-results-table" data-testid="table-baseline-results">
+              <thead><tr>
+                <th>Run ID</th><th>Topology</th><th>Scenario</th><th>Algorithm</th><th>Seed</th>
+                <th>LS latency</th><th>TS latency</th><th>LS loss</th><th>TS loss</th>
+                <th>QoS satisfied</th><th>Reroutes</th><th>Proactive</th><th>Reactive</th>
+              </tr></thead>
+              <tbody>{runs.data.map(run => <tr key={run.run_id} data-testid={`row-baseline-${run.seed}-${run.algorithm}`}>
+                <td className="mono" title={run.run_id}>{run.run_id.slice(0, 8)}</td>
+                <td>{run.topology === 'demo-7' ? '7-switch demo' : run.topology}</td>
+                <td>{run.scenario}</td>
+                <td>{run.algorithm === 'static-dijkstra' ? 'Static Dijkstra' : run.algorithm.toUpperCase()}</td>
+                <td className="mono">{run.seed}</td>
+                <td className="mono">{run.ls_latency_ms.toFixed(2)} ms</td>
+                <td className="mono">{run.ts_latency_ms.toFixed(2)} ms</td>
+                <td className="mono">{run.ls_loss_pct.toFixed(3)}%</td>
+                <td className="mono">{run.ts_loss_pct.toFixed(3)}%</td>
+                <td className="mono">{run.qos_satisfied_pct.toFixed(1)}%</td>
+                <td className="mono">{run.reroutes}</td>
+                <td className="mono">{run.proactive_reroutes}</td>
+                <td className="mono">{run.reactive_reroutes}</td>
+              </tr>)}</tbody>
+            </table>
+          </div>}
+    </Panel>
+  </main>;
+}
+
 function AlgorithmsPage() {
   const algorithms = useGetAlgorithms();
   const topologies = useGetTopologies();
@@ -476,7 +521,7 @@ function SettingsPage() {
 }
 function NotFound() { return <main className="page"><PageHead eyebrow="ERROR / 404" title="Route not found" subtitle="That console destination does not exist." /><Link href="/" className="btn btn-primary">Return to simulation</Link></main>; }
 function RoutedContent() {
-  return <Shell><Switch><Route path="/" component={Dashboard} /><Route path="/experiments" component={ExperimentsPage} /><Route path="/algorithms" component={AlgorithmsPage} /><Route path="/settings" component={SettingsPage} /><Route component={NotFound} /></Switch></Shell>;
+  return <Shell><Switch><Route path="/" component={Dashboard} /><Route path="/experiments" component={ExperimentsPage} /><Route path="/baselines" component={BaselineResultsPage} /><Route path="/algorithms" component={AlgorithmsPage} /><Route path="/settings" component={SettingsPage} /><Route component={NotFound} /></Switch></Shell>;
 }
 function App() {
   return <QueryClientProvider client={queryClient}><WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}><RoutedContent /></WouterRouter></QueryClientProvider>;

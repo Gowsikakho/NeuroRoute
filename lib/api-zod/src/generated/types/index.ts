@@ -11,6 +11,7 @@ export * from './controllerQueueState';
 export * from './controllerState';
 export * from './controllerSwitch';
 export * from './experiment';
+export * from './experimentBaselineRun';
 export * from './experimentInput';
 export * from './experimentResult';
 export * from './experimentStatus';

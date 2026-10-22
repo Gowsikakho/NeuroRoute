@@ -197,6 +197,20 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Experiment"
+  /experiments/baselines:
+    get:
+      operationId: getExperimentBaselines
+      tags: [experiments]
+      summary: Read the static and ECMP baseline CSV results
+      responses:
+        "200":
+          description: Baseline experiment rows
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ExperimentBaselineRun"
   /experiments/run:
     post:
       operationId: runExperiment
@@ -600,4 +614,47 @@ components:
         meanQueueOccupancy:
           type: number
       required: [algorithm, meanLatencyMs, throughputMbps, packetLossPercent, meanQueueOccupancy]
+    ExperimentBaselineRun:
+      type: object
+      properties:
+        run_id:
+          type: string
+        topology:
+          type: string
+        scenario:
+          type: string
+        algorithm:
+          type: string
+        seed:
+          type: integer
+        ls_latency_ms:
+          type: number
+        ts_latency_ms:
+          type: number
+        ls_loss_pct:
+          type: number
+        ts_loss_pct:
+          type: number
+        qos_satisfied_pct:
+          type: number
+        reroutes:
+          type: integer
+        proactive_reroutes:
+          type: integer
+        reactive_reroutes:
+          type: integer
+      required:
+        - run_id
+        - topology
+        - scenario
+        - algorithm
+        - seed
+        - ls_latency_ms
+        - ts_latency_ms
+        - ls_loss_pct
+        - ts_loss_pct
+        - qos_satisfied_pct
+        - reroutes
+        - proactive_reroutes
+        - reactive_reroutes
 
