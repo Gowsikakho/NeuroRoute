@@ -15,6 +15,7 @@ class QueueRateQLearningAgent:
         self._actions = (0.2, 0.35, 0.5, 0.65, 0.8)
         self._values: dict[tuple[int, int, int], list[float]] = {}
         self._last: tuple[tuple[int, int, int], int] | None = None
+        self._pending_reward: float | None = None
 
     def _state(self, ls: float, ts: float) -> tuple[int, int, int]:
         total = max(ls + ts, 1.0)
@@ -30,17 +31,18 @@ class QueueRateQLearningAgent:
         else:
             action = max(range(len(values)), key=values.__getitem__)
 
-        if self._last is not None:
-            prior_state, prior_action = self._last
-            prior_values = self._values.setdefault(
-                prior_state, [0.0] * len(self._actions)
-            )
-            capacity = 100.0
-            reward = self._eta * (capacity - min(ls + ts, capacity))
-            target = reward + self._gamma * max(values)
-            prior_values[prior_action] += self._alpha * (
-                target - prior_values[prior_action]
-            )
-
         self._last = (state, action)
         return self._actions[action]
+
+    def observe_reward(self, reward: float) -> None:
+        self._pending_reward = reward
+
+    def update(self) -> None:
+        if self._last is None or self._pending_reward is None:
+            return
+        state, action = self._last
+        values = self._values.setdefault(state, [0.0] * len(self._actions))
+        target = self._eta * self._pending_reward + self._gamma * max(values)
+        values[action] += self._alpha * (target - values[action])
+        self._last = None
+        self._pending_reward = None

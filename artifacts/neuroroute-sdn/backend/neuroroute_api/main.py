@@ -41,7 +41,7 @@ class FailureScheduleInput(BaseModel):
 
 class SimulationStartInput(BaseModel):
     topologyId: str
-    algorithm: str
+    algorithm: str | None = None
     durationSeconds: int = Field(ge=10, le=3600)
     seed: int
     lsRate: float = Field(ge=0, le=100)
@@ -60,6 +60,10 @@ class ExperimentInput(BaseModel):
 class QueueRateInput(BaseModel):
     switchId: str
     lsRatePercent: float = Field(ge=0, le=100)
+
+
+class ModeInput(BaseModel):
+    mode: str
 
 
 class FlowRuleInput(BaseModel):
@@ -89,6 +93,19 @@ def get_algorithms() -> list[dict]:
     return [dict(algorithm) for algorithm in ALGORITHM_CATALOG]
 
 
+@api.get("/mode")
+def get_mode() -> dict:
+    return simulation.mode()
+
+
+@api.post("/mode")
+def set_mode(config: ModeInput) -> dict:
+    try:
+        return simulation.set_mode(config.mode)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
 @api.get("/simulation")
 def get_simulation() -> dict:
     return simulation.snapshot()
@@ -98,7 +115,8 @@ def get_simulation() -> dict:
 def start_simulation(config: SimulationStartInput) -> dict:
     if config.topologyId not in TOPOLOGIES:
         raise HTTPException(status_code=400, detail="Unknown topology.")
-    if config.algorithm not in AVAILABLE_ALGORITHMS:
+    algorithm = config.algorithm or simulation.mode()["mode"]
+    if algorithm not in AVAILABLE_ALGORITHMS:
         raise HTTPException(
             status_code=400,
             detail="This algorithm is not available in the current simulator build.",
@@ -106,7 +124,7 @@ def start_simulation(config: SimulationStartInput) -> dict:
     try:
         return simulation.start(
             config.topologyId,
-            config.algorithm,
+            algorithm,
             config.durationSeconds,
             config.seed,
             config.lsRate,

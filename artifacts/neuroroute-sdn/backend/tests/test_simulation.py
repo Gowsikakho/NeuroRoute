@@ -7,6 +7,8 @@ from neuroroute_api.preprocessing import dense_timing_indicator, tanh_normalize
 from neuroroute_api.controller import SimulatedOpenFlowController
 from neuroroute_api.queue_agent import QueueRateQLearningAgent
 from neuroroute_api.queue_model import QUEUE_CAPACITY_BYTES, OutputPortQueue, Packet
+from neuroroute_api.network_backend import NetworkBackend
+from neuroroute_api.routing import ALGORITHM_REGISTRY, StaticRoutingAlgorithm
 from neuroroute_api.simulation import AVAILABLE_ALGORITHMS, SimulationManager
 from neuroroute_api.topologies import TOPOLOGIES
 
@@ -43,12 +45,52 @@ class SimulationTests(unittest.TestCase):
                 self.assertEqual(result["algorithm"], algorithm)
                 self.assertGreaterEqual(result["throughputMbps"], 0)
 
+    def test_simulator_implements_network_backend_control_contract(self) -> None:
+        runner = SimulationManager(persist=False)
+        self.assertIsInstance(runner, NetworkBackend)
+        topology = runner.get_topology()
+        self.assertEqual(topology["id"], "demo-7")
+        self.assertEqual(runner.poll_stats(), [])
+        self.assertEqual(set(runner.mode()["algorithms"][index]["name"] for index in range(5)),
+                         {"static", "ecmp", "lstm_ql", "gcn_dqn", "gat_d3qn"})
+
+    def test_routing_registry_includes_requested_modes(self) -> None:
+        self.assertEqual(
+            set(ALGORITHM_REGISTRY),
+            {"static", "ecmp", "lstm_ql", "gcn_dqn", "gat_d3qn"},
+        )
+        self.assertIsInstance(ALGORITHM_REGISTRY["static"].factory(), StaticRoutingAlgorithm)
+
+    def test_static_control_loop_runs_and_switches_modes(self) -> None:
+        runner = SimulationManager(persist=False)
+        self.assertEqual(runner.set_mode("static")["mode"], "static")
+        runner.start("demo-7", "static", 10, 41, 35, 50, "fast")
+        environment = runner._environment
+        assert environment is not None
+        environment.run(until=3.00001)
+        self.assertGreaterEqual(runner._control_loop_ticks, 2)
+        self.assertTrue(math.isfinite(runner._last_control_reward))
+        self.assertEqual(runner.set_mode("ecmp")["simulation"]["algorithm"], "ecmp")
+        self.assertEqual(runner.mode()["mode"], "ecmp")
+        runner.stop()
+
     def test_queue_rate_agent_stays_within_valid_split(self) -> None:
         agent = QueueRateQLearningAgent(seed=19)
         for _ in range(12):
             rate = agent.choose_rate(25.0, 40.0)
             self.assertGreaterEqual(rate, 0.0)
             self.assertLessEqual(rate, 1.0)
+
+    def test_queue_rate_agent_observes_reward_and_updates_policy(self) -> None:
+        agent = QueueRateQLearningAgent(seed=19)
+        agent.choose_rate(25.0, 40.0)
+        state, action = agent._last  # type: ignore[misc]
+
+        agent.observe_reward(1.0)
+        agent.update()
+
+        self.assertGreater(agent._values[state][action], 0.0)
+        self.assertIsNone(agent._last)
 
     def test_seeded_run_has_repeatable_metric_output(self) -> None:
         first = SimulationManager.run_offline("demo-7", "static-dijkstra", 10, 2026)

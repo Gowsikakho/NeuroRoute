@@ -1,1 +1,2 @@
 - [Replit internal ports](replit-internal-ports.md) — Check reserved listeners before choosing a loopback port for a sidecar service.
+- [Backend Python test imports](backend-python-test-imports.md) — Run backend tests from the backend directory with `PYTHONPATH=.` in this workspace.

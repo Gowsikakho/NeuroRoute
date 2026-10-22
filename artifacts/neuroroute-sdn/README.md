@@ -17,6 +17,7 @@ Paths used by the Python backend are built with `pathlib`. The simulator does no
 - SimPy-driven latency-sensitive Poisson traffic and throughput-sensitive constant-rate traffic.
 - Static Dijkstra and seeded ECMP route selection, plus a tabular Q-learning LS/TS service-rate controller.
 - Simulated OpenFlow-style flow tables, port counters, queue rates, flow-rule installation, and a WebSocket stream at `/api/ws/simulation`.
+- A pluggable routing control loop with live mode selection: `GET /api/mode` lists registered modes and `POST /api/mode` accepts `{"mode":"static"}` or `{"mode":"ecmp"}`. A simulation start request may omit `algorithm` to use the selected mode.
 - Queue occupancy time-series capture and SQLite persistence.
 - Comparative baseline runs saved to SQLite, with CSV and SVG exports from `scripts/run_all.ps1`.
 - Research model source for GAT-GRU occupancy forecasting, dueling Double-DQN, and LSTM/Chebyshev-GCN baselines. Install `backend/requirements-ml.txt` when PyTorch and PyTorch Geometric are needed.
@@ -34,7 +35,7 @@ Paths used by the Python backend are built with `pathlib`. The simulator does no
 
 ## Research-paper fidelity
 
-The attached brief referenced a paper's Eq. 3, Algorithm 1, and a dashboard page list, but did not include the paper or the page list. The current app therefore does **not** claim exact reproduction of the paper. `preprocessing.py` contains generic timing-indicator and tanh-normalization helpers; their constants and precise definitions must be checked against the paper. The live simulator exposes static Dijkstra, ECMP, and tabular Q-learning. D3QN, LSTM-Q-learning, and Chebyshev-GCN-DQN are listed as unavailable until their paper-specific training/integration work is completed.
+The attached brief referenced a paper's Eq. 3, Algorithm 1, and a dashboard page list, but did not include the paper or the page list. The current app therefore does **not** claim exact reproduction of the paper. `preprocessing.py` contains generic timing-indicator and tanh-normalization helpers; their constants and precise definitions must be checked against the paper. The live simulator exposes static Dijkstra, ECMP, and tabular Q-learning. The `lstm_ql`, `gcn_dqn`, and `gat_d3qn` modes are registered but unavailable until their policies and trained model integration are completed.
 
 To complete an exact reproduction, provide the paper (or its Eq. 3 and Algorithm 1 pages) and the missing dashboard page list.
 
@@ -51,7 +52,8 @@ Run `pwsh -File artifacts/neuroroute-sdn/scripts/run_all.ps1` from the project r
 From the workspace root, run:
 
 ```sh
-uv run --project . --directory artifacts/neuroroute-sdn/backend pytest
+cd artifacts/neuroroute-sdn/backend
+PYTHONPATH=. uv run --project ../../.. pytest
 ```
 
 The pytest suite includes a seeded M/M/1 queue check against the theoretical mean delay `1 / (service rate - arrival rate)` with a 5% tolerance.

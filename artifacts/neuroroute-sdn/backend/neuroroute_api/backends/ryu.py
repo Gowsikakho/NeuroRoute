@@ -31,6 +31,10 @@ class RyuRestBackend(NetworkBackend):
         datapaths = self._request("/stats/switches")
         return [{"id": str(dpid), "label": f"DPID {dpid}"} for dpid in datapaths]
 
+    def get_topology(self) -> dict:
+        nodes = self.discover_topology()
+        return {"nodes": nodes, "links": []}
+
     def get_port_stats(self) -> list[dict]:
         switches = self._request("/stats/switches")
         stats: list[dict] = []
@@ -48,6 +52,9 @@ class RyuRestBackend(NetworkBackend):
             stats.extend(response.get(str(dpid), []))
         return stats
 
+    def poll_stats(self, window_seconds: int = 120) -> list[dict]:
+        return self.get_queue_stats(window_seconds)
+
     def install_flow_rule(self, switch_id: str, rule: dict) -> dict:
         payload = {"dpid": int(switch_id), **rule}
         return self._request("/stats/flowentry/add", payload)
@@ -63,3 +70,40 @@ class RyuRestBackend(NetworkBackend):
             ],
         }
         return self._request(f"/qos/queue/{switch_id}/1", payload)
+
+    def set_queue_rate(self, switch_id: str, ls_share: float) -> dict:
+        return self.install_queue_rate(switch_id, ls_share)
+
+    def install_path(self, flow_id: str, path: list[str]) -> dict:
+        if len(path) < 2:
+            raise ValueError("A path must include at least one link.")
+        installed = []
+        for switch_id, next_hop in zip(path, path[1:]):
+            installed.append(
+                self.install_flow_rule(
+                    switch_id,
+                    {
+                        "match": {"flowId": flow_id},
+                        "actions": {"output": next_hop},
+                    },
+                )
+            )
+        return {"flowId": flow_id, "path": list(path), "rules": installed}
+
+    def start_traffic(self, config: dict) -> dict:
+        del config
+        raise NotImplementedError("Traffic generation is only available in the simulator.")
+
+    def stop_traffic(self) -> dict:
+        raise NotImplementedError("Traffic generation is only available in the simulator.")
+
+    def fail_link(self, link_id: str) -> dict:
+        del link_id
+        raise NotImplementedError("Link failures must be managed by the connected controller.")
+
+    def restore_link(self, link_id: str) -> dict:
+        del link_id
+        raise NotImplementedError("Link restoration must be managed by the connected controller.")
+
+    def step(self) -> dict:
+        return {"stats": self.poll_stats(), "topology": self.get_topology()}

@@ -23,15 +23,25 @@ from .queue_model import (
     OutputPortQueue,
     Packet,
 )
+from .routing import (
+    ALGORITHM_REGISTRY,
+    RoutingAlgorithm,
+    create_routing_algorithm,
+)
 from .storage import save_queue_samples
 from .topologies import TOPOLOGIES, TopologyDefinition
 
-AVAILABLE_ALGORITHMS = {
+LEGACY_AVAILABLE_ALGORITHMS = {
     "static-dijkstra",
     "ecmp",
     "queue-q-learning",
     "proactive-threshold",
 }
+AVAILABLE_ALGORITHMS = LEGACY_AVAILABLE_ALGORITHMS | {
+    name for name, registration in ALGORITHM_REGISTRY.items() if registration.available
+}
+
+_ROUTING_ALIASES = {"static-dijkstra": "static"}
 
 ALGORITHM_CATALOG = [
     {
@@ -84,6 +94,17 @@ ALGORITHM_CATALOG = [
         "available": False,
     },
 ]
+ALGORITHM_CATALOG.extend(
+    {
+        "id": registration.name,
+        "name": registration.display_name,
+        "family": "classical" if registration.name in {"static", "ecmp"} else "research baseline",
+        "description": registration.description,
+        "available": registration.available,
+    }
+    for registration in ALGORITHM_REGISTRY.values()
+    if registration.name not in {algorithm["id"] for algorithm in ALGORITHM_CATALOG}
+)
 
 FLOW_COUNT_PER_CLASS = 4
 LS_PACKET_BYTES = 200
@@ -150,6 +171,11 @@ class SimulationManager(NetworkBackend):
         self._link_events: list[dict] = []
         self._environment: simpy.Environment | None = None
         self._queue_agent: QueueRateQLearningAgent | None = None
+        self._selected_mode = "static"
+        self._routing_algorithm: RoutingAlgorithm | None = create_routing_algorithm("static")
+        self._control_loop_ticks = 0
+        self._last_control_reward = 0.0
+        self._agent_updates = 0
         self._controller = SimulatedOpenFlowController()
         self._random = random.Random(0)
         self._service_split = 0.62
@@ -172,7 +198,7 @@ class SimulationManager(NetworkBackend):
             "id": "idle",
             "status": "idle",
             "topologyId": "demo-7",
-            "algorithm": "static-dijkstra",
+            "algorithm": self._selected_mode,
             "elapsedSeconds": 0.0,
             "durationSeconds": 0,
             "activeFlows": 0,
@@ -257,6 +283,16 @@ class SimulationManager(NetworkBackend):
             if algorithm == "queue-q-learning"
             else None
         )
+        routing_name = _ROUTING_ALIASES.get(algorithm, algorithm)
+        self._routing_algorithm = (
+            create_routing_algorithm(routing_name)
+            if routing_name in {"static", "ecmp"}
+            else None
+        )
+        self._selected_mode = routing_name if routing_name in ALGORITHM_REGISTRY else "static"
+        self._control_loop_ticks = 0
+        self._last_control_reward = 0.0
+        self._agent_updates = 0
         self._service_split = 0.62
         self._lost_packets = 0
         self._delivered_packets = 0
@@ -558,6 +594,7 @@ class SimulationManager(NetworkBackend):
                 if self._state.get("status") != "running":
                     return
                 self._poll_stats()
+                self._run_routing_control_loop()
                 self._check_congestion_reroutes()
 
     def _check_congestion_reroutes(self) -> None:
@@ -682,6 +719,100 @@ class SimulationManager(NetworkBackend):
                 "updatedAt": _utc_now(),
             }
         )
+        if self._queue_agent is not None and self._routing_algorithm is None:
+            reward = (
+                float(self._state.get("throughputMbps", 0.0))
+                - float(self._state.get("averageLatencyMs", 0.0)) * 0.01
+                - float(self._state.get("packetLossPercent", 0.0)) * 0.1
+            )
+            self._queue_agent.observe_reward(reward)
+            self._queue_agent.update()
+            self._agent_updates += 1
+
+    def _run_routing_control_loop(self) -> None:
+        """Collect, predict, decide, install, observe reward, and update agents."""
+        algorithm = self._routing_algorithm
+        if algorithm is None:
+            return
+
+        topology = self.get_topology()
+        stats = self.poll_stats()
+        state = {
+            "topology": topology,
+            "stats": stats,
+            "flows": [
+                {
+                    "flowId": flow.flow_id,
+                    "source": flow.source,
+                    "destination": flow.destination,
+                    "trafficClass": flow.traffic_class,
+                    "active": not flow.done,
+                }
+                for flow in self._flows
+                if not flow.done
+            ],
+        }
+        state["predictedQueueOccupancy"] = self._predict_queue_occupancy(stats)
+        decisions = algorithm.decide(state)
+
+        rates_by_switch: dict[str, list[float]] = {}
+        for flow_id, decision in decisions.items():
+            flow = self._flows_by_id.get(flow_id)
+            if flow is None or flow.done:
+                continue
+            if decision.path and decision.path != flow.path:
+                self.install_path(flow_id, decision.path)
+            for switch_id in decision.path[:-1]:
+                rates_by_switch.setdefault(switch_id, []).append(decision.queue_rate)
+
+        for switch_id, rates in rates_by_switch.items():
+            self.set_queue_rate(switch_id, sum(rates) / len(rates))
+
+        self._last_control_reward = (
+            float(self._state.get("throughputMbps", 0.0))
+            - float(self._state.get("averageLatencyMs", 0.0)) * 0.01
+            - float(self._state.get("packetLossPercent", 0.0)) * 0.1
+        )
+        self._observe_reward(self._last_control_reward)
+        self._update_agents()
+        self._control_loop_ticks += 1
+
+    @staticmethod
+    def _predict_queue_occupancy(stats: list[dict]) -> dict[str, dict[str, float]]:
+        """Project each directed queue one polling interval using its recent trend."""
+        by_port: dict[str, list[dict]] = {}
+        for point in stats:
+            by_port.setdefault(point["portId"], []).append(point)
+        forecast = {}
+        for port_id, points in by_port.items():
+            points.sort(key=lambda point: point["elapsedSeconds"])
+            current = points[-1]
+            previous = points[-2] if len(points) > 1 else current
+            forecast[port_id] = {
+                traffic_class: min(
+                    100.0,
+                    max(
+                        0.0,
+                        float(current[f"{traffic_class}Occupancy"])
+                        + max(
+                            0.0,
+                            float(current[f"{traffic_class}Occupancy"])
+                            - float(previous[f"{traffic_class}Occupancy"]),
+                        ),
+                    ),
+                )
+                for traffic_class in ("ls", "ts")
+            }
+        return forecast
+
+    def _observe_reward(self, reward: float) -> None:
+        if self._queue_agent is not None:
+            self._queue_agent.observe_reward(reward)
+
+    def _update_agents(self) -> None:
+        if self._queue_agent is not None:
+            self._queue_agent.update()
+            self._agent_updates += 1
 
     def _flow_metrics(self) -> list[dict]:
         result = []
@@ -767,8 +898,7 @@ class SimulationManager(NetworkBackend):
             return dict(self._state)
 
     def _run_loop(self) -> None:
-        environment = self._environment
-        if environment is None:
+        if self._environment is None:
             return
         while not self._stop_event.is_set():
             with self._lock:
@@ -779,8 +909,7 @@ class SimulationManager(NetworkBackend):
                     self._state["activeFlows"] = 0
                     self._state["updatedAt"] = _utc_now()
                     return
-                target = min(float(environment.now) + 0.1, self._duration_seconds + 0.00001)
-                environment.run(until=target)
+                self.step()
             if self._speed_mode == "realtime":
                 if self._stop_event.wait(0.1):
                     return
@@ -829,6 +958,17 @@ class SimulationManager(NetworkBackend):
                 for topology_id, topology in TOPOLOGIES.items()
             ]
 
+    def get_topology(self) -> dict:
+        with self._lock:
+            topology_id = self._state["topologyId"]
+            return TOPOLOGIES[topology_id].as_dict(
+                self._link_utilization,
+                self._link_status,
+            )
+
+    def poll_stats(self, window_seconds: int = 120) -> list[dict]:
+        return self.metrics(window_seconds)
+
     def discover_topology(self) -> list[dict]:
         return self.topologies()
 
@@ -854,6 +994,109 @@ class SimulationManager(NetworkBackend):
     def install_queue_rate(self, switch_id: str, ls_share: float) -> dict:
         with self._lock:
             return self._controller.install_queue_rate(switch_id, ls_share)
+
+    def set_queue_rate(self, switch_id: str, ls_share: float) -> dict:
+        return self.install_queue_rate(switch_id, ls_share)
+
+    def install_path(self, flow_id: str, path: list[str]) -> dict:
+        with self._lock:
+            flow = self._flows_by_id.get(flow_id)
+            if flow is None:
+                raise ValueError(f"Unknown flow: {flow_id}")
+            if (
+                not path
+                or path[0] != flow.source
+                or path[-1] != flow.destination
+                or any(
+                    not self._graph.has_edge(source, target)
+                    for source, target in zip(path, path[1:])
+                )
+            ):
+                raise ValueError(f"Invalid or unavailable path for flow: {flow_id}")
+            flow.path = list(path)
+            flow.last_queue_levels.clear()
+            self._controller.record_path(path, flow.traffic_class, 0)
+            return {"flowId": flow_id, "path": list(path)}
+
+    def start_traffic(self, config: dict) -> dict:
+        def value(camel: str, snake: str, default: object = None) -> object:
+            return config.get(camel, config.get(snake, default))
+
+        topology_id = value("topologyId", "topology_id")
+        duration = value("durationSeconds", "duration_seconds")
+        seed = config.get("seed")
+        if topology_id is None or duration is None or seed is None:
+            raise ValueError("Traffic config requires topologyId, durationSeconds, and seed.")
+        return self.start(
+            str(topology_id),
+            str(config.get("algorithm", self._selected_mode)),
+            int(duration),
+            int(seed),
+            float(value("lsRate", "ls_rate", 35)),
+            float(value("tsRate", "ts_rate", 50)),
+            str(value("speedMode", "speed_mode", "realtime")),
+            value("failureSchedule", "failure_schedule"),
+        )
+
+    def stop_traffic(self) -> dict:
+        return self.stop()
+
+    def fail_link(self, link_id: str) -> dict:
+        with self._lock:
+            if self._environment is None or self._state["status"] != "running":
+                raise RuntimeError("A running simulation is required to fail a link.")
+            if link_id not in self._link_status:
+                raise ValueError(f"Unknown link: {link_id}")
+            self._set_link_state(link_id, False)
+            return {"linkId": link_id, "status": "down"}
+
+    def restore_link(self, link_id: str) -> dict:
+        with self._lock:
+            if self._environment is None or self._state["status"] != "running":
+                raise RuntimeError("A running simulation is required to restore a link.")
+            if link_id not in self._link_status:
+                raise ValueError(f"Unknown link: {link_id}")
+            self._set_link_state(link_id, True)
+            return {"linkId": link_id, "status": "up"}
+
+    def step(self) -> dict:
+        with self._lock:
+            environment = self._environment
+            if environment is None:
+                raise RuntimeError("No simulation is configured.")
+            if self._state["status"] != "running":
+                raise RuntimeError("A running simulation is required to step.")
+            target = min(
+                float(environment.now) + 0.1,
+                self._duration_seconds + 0.00001,
+            )
+            environment.run(until=target)
+            return self.snapshot()
+
+    def set_mode(self, mode: str) -> dict:
+        with self._lock:
+            algorithm = create_routing_algorithm(mode)
+            self._routing_algorithm = algorithm
+            self._queue_agent = None
+            self._selected_mode = mode
+            self._state["algorithm"] = mode
+            self._state["updatedAt"] = _utc_now()
+            return {"mode": self._selected_mode, "simulation": self.snapshot()}
+
+    def mode(self) -> dict:
+        with self._lock:
+            return {
+                "mode": self._selected_mode,
+                "algorithms": [
+                    {
+                        "name": registration.name,
+                        "displayName": registration.display_name,
+                        "available": registration.available,
+                        "description": registration.description,
+                    }
+                    for registration in ALGORITHM_REGISTRY.values()
+                ],
+            }
 
     def install_flow_rule(self, switch_id: str, rule: dict) -> dict:
         with self._lock:
