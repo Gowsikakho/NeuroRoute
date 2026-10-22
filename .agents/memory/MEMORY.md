@@ -1,2 +1,3 @@
 - [Replit internal ports](replit-internal-ports.md) — Check reserved listeners before choosing a loopback port for a sidecar service.
 - [Backend Python test imports](backend-python-test-imports.md) — Run backend tests from the backend directory with `PYTHONPATH=.` in this workspace.
+- [Queue congestion threshold](queue-congestion-threshold.md) — Switch-level congestion labels use one TS FIFO's capacity, not aggregate capacity across all egress ports.

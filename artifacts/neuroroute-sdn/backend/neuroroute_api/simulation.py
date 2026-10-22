@@ -20,6 +20,7 @@ from .network_backend import NetworkBackend
 from .queue_agent import QueueRateQLearningAgent
 from .queue_model import (
     QUEUE_CAPACITY_BYTES,
+    SERVICE_QUANTUM_SECONDS,
     OutputPortQueue,
     Packet,
 )
@@ -145,6 +146,7 @@ class FlowState:
     reroutes: int = 0
     rerouting: bool = False
     done: bool = False
+    bursty: bool = False
     last_reroute_at: float = -math.inf
     last_queue_levels: dict[str, float] = field(default_factory=dict)
 
@@ -189,6 +191,10 @@ class SimulationManager(NetworkBackend):
         self._interval_delivered_bytes = 0
         self._throughputs: list[float] = []
         self._reroute_count = 0
+        self._capture_switch_queues = False
+        self._static_routing_only = False
+        self._switch_queue_samples: list[dict] = []
+        self._traffic_profile = "normal"
         self._build_network(self._topology, None)
         self._controller.reset(list(self._queues))
         self._state = self._idle_state()
@@ -218,6 +224,7 @@ class SimulationManager(NetworkBackend):
         self,
         topology: TopologyDefinition,
         environment: simpy.Environment | None,
+        service_quantum_seconds: float = SERVICE_QUANTUM_SECONDS,
     ) -> None:
         self._topology = topology
         self._graph = nx.Graph()
@@ -244,6 +251,7 @@ class SimulationManager(NetworkBackend):
                     source=source,
                     target=target,
                     bandwidth_mbps=topology.bandwidth_mbps,
+                    service_quantum_seconds=service_quantum_seconds,
                 )
                 self._output_ports[port.port_id] = port
 
@@ -271,10 +279,18 @@ class SimulationManager(NetworkBackend):
         ts_rate: float,
         speed_mode: str = "fast",
         failure_schedule: dict | None = None,
+        traffic_profile: str = "normal",
+        capture_switch_queues: bool = False,
+        static_routing_only: bool = False,
+        service_quantum_seconds: float = SERVICE_QUANTUM_SECONDS,
     ) -> None:
         self._stop_event.clear()
         self._duration_seconds = duration_seconds
         self._speed_mode = speed_mode
+        self._traffic_profile = traffic_profile
+        self._capture_switch_queues = capture_switch_queues
+        self._static_routing_only = static_routing_only
+        self._switch_queue_samples = []
         self._ls_rate = ls_rate
         self._ts_rate = ts_rate
         self._random = random.Random(seed)
@@ -309,7 +325,11 @@ class SimulationManager(NetworkBackend):
         self._controller.reset(
             [f"s{index}" for index in range(TOPOLOGIES[topology_id].node_count)]
         )
-        self._build_network(TOPOLOGIES[topology_id], self._environment)
+        self._build_network(
+            TOPOLOGIES[topology_id],
+            self._environment,
+            service_quantum_seconds,
+        )
 
         self._state = {
             "id": str(uuid.uuid4()),
@@ -330,7 +350,7 @@ class SimulationManager(NetworkBackend):
             "rerouteCount": 0,
             "updatedAt": _utc_now(),
         }
-        self._flows = self._create_flows(seed)
+        self._flows = self._create_flows(seed, traffic_profile)
         self._flows_by_id = {flow.flow_id: flow for flow in self._flows}
         for flow in self._flows:
             flow.path = self._find_route(flow)
@@ -344,7 +364,11 @@ class SimulationManager(NetworkBackend):
 
         self._state["activeFlows"] = len(self._flows)
 
-    def _create_flows(self, seed: int) -> list[FlowState]:
+    def _create_flows(
+        self,
+        seed: int,
+        traffic_profile: str = "normal",
+    ) -> list[FlowState]:
         nodes = list(self._graph.nodes)
         total_link_bps = self._topology.bandwidth_mbps * 1_000_000
         ls_average_bps = total_link_bps * LS_MAX_LINK_SHARE * self._ls_rate / 100
@@ -363,7 +387,11 @@ class SimulationManager(NetworkBackend):
                 flow_id = f"{traffic_class}-{index + 1}"
                 flow_seed = _flow_seed(seed, flow_id)
                 random_source = random.Random(flow_seed)
-                source, destination = random_source.sample(nodes, 2)
+                if traffic_profile == "hotspot":
+                    destination = "s3"
+                    source = [node for node in nodes if node != destination][index]
+                else:
+                    source, destination = random_source.sample(nodes, 2)
                 flows.append(
                     FlowState(
                         flow_id=flow_id,
@@ -374,6 +402,8 @@ class SimulationManager(NetworkBackend):
                         arrival_rate_pps=rate_pps,
                         seed=flow_seed,
                         random_source=random_source,
+                        bursty=traffic_profile == "bursty"
+                        and traffic_class == "ts",
                     )
                 )
         return flows
@@ -408,10 +438,31 @@ class SimulationManager(NetworkBackend):
                     yield environment.timeout(min(off_duration, duration - environment.now))
         else:
             interval = 1 / flow.arrival_rate_pps
-            yield environment.timeout(flow.random_source.random() * interval)
-            while environment.now < duration:
-                self._generate_packet(flow)
-                yield environment.timeout(interval)
+            if flow.bursty:
+                cycle_seconds = 10.0
+                active_seconds = 2.0
+                yield environment.timeout(
+                    flow.random_source.random() * cycle_seconds
+                )
+                while environment.now < duration:
+                    burst_end = min(duration, environment.now + active_seconds)
+                    burst_interval = interval / (active_seconds / cycle_seconds)
+                    while environment.now < burst_end:
+                        wait = flow.random_source.expovariate(1 / burst_interval)
+                        if environment.now + wait >= burst_end:
+                            yield environment.timeout(burst_end - environment.now)
+                            break
+                        yield environment.timeout(wait)
+                        self._generate_packet(flow)
+                    if environment.now < duration:
+                        yield environment.timeout(
+                            min(cycle_seconds - active_seconds, duration - environment.now)
+                        )
+            else:
+                yield environment.timeout(flow.random_source.random() * interval)
+                while environment.now < duration:
+                    self._generate_packet(flow)
+                    yield environment.timeout(interval)
         flow.done = True
 
     def _generate_packet(self, flow: FlowState) -> None:
@@ -582,8 +633,9 @@ class SimulationManager(NetworkBackend):
                 if self._state.get("status") != "running":
                     return
                 self._poll_stats()
-                self._run_routing_control_loop()
-                self._check_congestion_reroutes()
+                if not self._static_routing_only:
+                    self._run_routing_control_loop()
+                    self._check_congestion_reroutes()
 
     def _check_congestion_reroutes(self) -> None:
         environment = self._environment
@@ -651,6 +703,43 @@ class SimulationManager(NetworkBackend):
             if count:
                 self._queues[switch_id]["ls"] /= count
                 self._queues[switch_id]["ts"] /= count
+
+        if self._capture_switch_queues:
+            for switch_id in sorted(self._queues):
+                switch_ports = [
+                    port
+                    for port in self._output_ports.values()
+                    if port.source == switch_id
+                ]
+                queue_length = sum(
+                    len(port.queues[traffic_class])
+                    for port in switch_ports
+                    for traffic_class in ("ls", "ts")
+                )
+                queue_bytes = sum(
+                    sum(port.occupancy_bytes.values())
+                    for port in switch_ports
+                )
+                queue_capacity_packets = len(switch_ports) * (
+                    QUEUE_CAPACITY_BYTES // LS_PACKET_BYTES
+                    + QUEUE_CAPACITY_BYTES // TS_PACKET_BYTES
+                )
+                # C_th is expressed in packets at 80% of one TS FIFO's capacity.
+                # The aggregate switch queue can include many egress ports, so
+                # using its full aggregate capacity would hide a saturated port.
+                congestion_threshold = (
+                    QUEUE_CAPACITY_BYTES // TS_PACKET_BYTES
+                ) * CONGESTION_THRESHOLD_PERCENT / 100
+                self._switch_queue_samples.append(
+                    {
+                        "switchId": switch_id,
+                        "elapsedSeconds": int(elapsed),
+                        "queueLength": queue_length,
+                        "queueBytes": queue_bytes,
+                        "queueCapacityPackets": queue_capacity_packets,
+                        "congestionThreshold": congestion_threshold,
+                    }
+                )
 
         if self._queue_agent is not None:
             self._service_split = self._queue_agent.choose_rate(
@@ -1099,6 +1188,10 @@ class SimulationManager(NetworkBackend):
         seed: int,
         ls_rate: float = 35,
         ts_rate: float = 50,
+        capture_switch_queues: bool = False,
+        traffic_profile: str = "normal",
+        static_routing_only: bool = False,
+        service_quantum_seconds: float = SERVICE_QUANTUM_SECONDS,
     ) -> dict:
         runner = cls(persist=False)
         runner._configure(
@@ -1109,6 +1202,10 @@ class SimulationManager(NetworkBackend):
             ls_rate,
             ts_rate,
             speed_mode="fast",
+            traffic_profile=traffic_profile,
+            capture_switch_queues=capture_switch_queues,
+            static_routing_only=static_routing_only,
+            service_quantum_seconds=service_quantum_seconds,
         )
         environment = runner._environment
         if environment is None:
@@ -1197,6 +1294,7 @@ class SimulationManager(NetworkBackend):
             else 0.0,
             "reroutes": runner._reroute_count,
             "flowMetrics": flow_metrics,
+            "switchQueueSamples": list(runner._switch_queue_samples),
         }
 
 

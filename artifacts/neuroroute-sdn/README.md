@@ -45,6 +45,10 @@ To install optional model packages on Windows, run `pwsh -File artifacts/neuroro
 
 After running a simulation long enough to collect queue samples, train the GAT-GRU forecaster from the backend directory with `py -3.11 -m neuroroute_api.ml.train_gat_gru --topology demo-7`. Model weights are generated locally and ignored by Git.
 
+To collect the Step 5 forecasting dataset, run `PYTHONPATH=. uv run --project ../../.. python -m neuroroute_api.data_collection` from `artifacts/neuroroute-sdn/backend`. It runs 10 deterministic seeds for each of four `demo-7` traffic profiles (low, medium, bursty, hotspot), with static Dijkstra routing and one-second per-switch packet queue samples. The default 715 seconds per profile/seed produces 200,200 raw rows in `experiments/data/demo-7/queue_samples.csv`.
+
+The collector also writes chronological sliding windows to `experiments/data/demo-7/windows.csv`: `X` has shape `[10 steps, 7 switches, 2 features]` (packet queue length and Eq. 3 timing indicator); each target has shape `[7 switches]` and is the congestion state at `t+3` or `t+5`. Windows are split by target time within each run (70% train, 15% validation, 15% test), without shuffling. Congestion threshold `C_th` is 80% of one TS FIFO's packet capacity so a saturated egress queue is not hidden by summing all switch ports; `y_max` is 10 seconds. The directed `[2, 22]` `edge_index.json` is loaded by the GAT-GRU trainer when present. Use `--horizon-k 3` or `--horizon-k 5` to train on these preprocessed windows and evaluate validation/test loss. To refresh only labels/windows after changing preprocessing constants, use `--preprocess-existing`.
+
 ## Experiment exports
 
 Run `pwsh -File artifacts/neuroroute-sdn/scripts/run_all.ps1` from the project root. It compares each enabled algorithm on each built-in topology and writes `experiment-results.csv` plus SVG charts under `artifacts/neuroroute-sdn/generated-artifacts/`. Generated files and the local SQLite database are ignored by Git.

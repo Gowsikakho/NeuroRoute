@@ -10,6 +10,7 @@ __pycache__/
 artifacts/neuroroute-sdn/backend/data/
 artifacts/neuroroute-sdn/backend/models/*.pt
 artifacts/neuroroute-sdn/generated-artifacts/
+/experiments/data/
 out-tsc
 *.tsbuildinfo
 .expo

@@ -5,7 +5,12 @@ import unittest
 
 import networkx as nx
 
-from neuroroute_api.preprocessing import dense_timing_indicator, tanh_normalize
+from neuroroute_api.data_collection import build_run_windows
+from neuroroute_api.preprocessing import (
+    dense_timing_indicator,
+    edge_index_array,
+    tanh_normalize,
+)
 from neuroroute_api.controller import SimulatedOpenFlowController
 from neuroroute_api.queue_agent import QueueRateQLearningAgent
 from neuroroute_api.queue_model import QUEUE_CAPACITY_BYTES, OutputPortQueue, Packet
@@ -198,9 +203,70 @@ class QueueModelTests(unittest.TestCase):
 
 
 class PreprocessingTests(unittest.TestCase):
-    def test_dense_timing_indicator_and_tanh_normalization(self) -> None:
-        matrix = dense_timing_indicator([10.0, 11.0, 12.0], 1.0, 4)
-        self.assertEqual(matrix, [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0]])
+    def test_dense_timing_indicator_matches_hand_computed_eq_3(self) -> None:
+        indicator = dense_timing_indicator([1, 3, 4, 2, 2, 5], 3, 4)
+        expected = [
+            math.tanh(1 / 4),
+            math.tanh(2 / 4),
+            0.0,
+            math.tanh(1 / 4),
+            math.tanh(2 / 4),
+            0.0,
+        ]
+        for actual, hand_computed in zip(indicator, expected):
+            self.assertAlmostEqual(actual, hand_computed)
+
+    def test_sliding_windows_have_expected_shapes_and_chronological_splits(self) -> None:
+        queue_frames = [
+            {
+                "s0": {"queue_length": index, "c_th": 18},
+                "s1": {"queue_length": index % 4, "c_th": 2},
+            }
+            for index in range(30)
+        ]
+        windows = list(
+            build_run_windows(
+                "test-run",
+                "medium",
+                7,
+                queue_frames,
+                window_length=10,
+                horizons=(3, 5),
+            )
+        )
+
+        horizon_three = [window for window in windows if window["horizon_k"] == 3]
+        horizon_five = [window for window in windows if window["horizon_k"] == 5]
+        self.assertEqual(len(horizon_three), 18)
+        self.assertEqual(len(horizon_five), 16)
+        self.assertEqual(len(horizon_three[0]["x"]), 10)
+        self.assertEqual(len(horizon_three[0]["x"][0]), 2)
+        self.assertEqual(len(horizon_three[0]["x"][0][0]), 2)
+        self.assertEqual(len(horizon_three[0]["target"]), 2)
+        self.assertEqual(horizon_three[0]["target_index"], 12)
+        self.assertEqual(horizon_three[0]["target"], [0, 0])
+        self.assertEqual(horizon_three[-1]["split"], "test")
+        split_order = {"train": 0, "validation": 1, "test": 2}
+        self.assertEqual(
+            [split_order[window["split"]] for window in horizon_three],
+            sorted(split_order[window["split"]] for window in horizon_three),
+        )
+        target_indexes = [window["target_index"] for window in horizon_three]
+        self.assertEqual(target_indexes, sorted(target_indexes))
+
+    def test_saved_graph_edge_index_layout_is_directed_and_bidirectional(self) -> None:
+        edge_index = edge_index_array("demo-7")
+        self.assertEqual(len(edge_index), 2)
+        self.assertEqual(len(edge_index[0]), 22)
+        self.assertEqual(len(edge_index[1]), 22)
+        directed_edges = set(zip(edge_index[0], edge_index[1]))
+        self.assertTrue(all((target, source) in directed_edges for source, target in directed_edges))
+
+    def test_dense_timing_indicator_validates_threshold_series_length(self) -> None:
+        with self.assertRaises(ValueError):
+            dense_timing_indicator([1, 2], [1], 3)
+
+    def test_tanh_normalization(self) -> None:
         normalized = tanh_normalize([0.0, 1.0, 2.0], 1.0, 1.0)
         self.assertAlmostEqual(normalized[1], 0.0)
         self.assertLess(normalized[0], 0.0)

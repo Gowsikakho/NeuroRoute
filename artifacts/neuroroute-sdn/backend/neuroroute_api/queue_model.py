@@ -32,12 +32,16 @@ class OutputPortQueue:
         target: str,
         bandwidth_mbps: float,
         capacity_bytes: int = QUEUE_CAPACITY_BYTES,
+        service_quantum_seconds: float = SERVICE_QUANTUM_SECONDS,
     ) -> None:
+        if service_quantum_seconds <= 0:
+            raise ValueError("service_quantum_seconds must be positive.")
         self.source = source
         self.target = target
         self.port_id = f"{source}:{target}"
         self.bandwidth_bps = bandwidth_mbps * 1_000_000
         self.capacity_bytes = capacity_bytes
+        self.service_quantum_seconds = service_quantum_seconds
         self.queues: dict[str, deque[Packet]] = {
             traffic_class: deque() for traffic_class in TRAFFIC_CLASSES
         }
@@ -90,7 +94,7 @@ class OutputPortQueue:
     ) -> Iterator[simpy.Event]:
         last_refill = float(environment.now)
         while True:
-            yield environment.timeout(SERVICE_QUANTUM_SECONDS)
+            yield environment.timeout(self.service_quantum_seconds)
             now = float(environment.now)
             elapsed = now - last_refill
             last_refill = now
