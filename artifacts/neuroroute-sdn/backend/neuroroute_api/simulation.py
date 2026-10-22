@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import hashlib
 import math
 import random
 import threading
 import time
 import uuid
 from collections import deque
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from itertools import islice
+from typing import Iterator
 
 import networkx as nx
 import simpy
@@ -15,6 +18,11 @@ import simpy
 from .controller import SimulatedOpenFlowController
 from .network_backend import NetworkBackend
 from .queue_agent import QueueRateQLearningAgent
+from .queue_model import (
+    QUEUE_CAPACITY_BYTES,
+    OutputPortQueue,
+    Packet,
+)
 from .storage import save_queue_samples
 from .topologies import TOPOLOGIES, TopologyDefinition
 
@@ -22,6 +30,7 @@ AVAILABLE_ALGORITHMS = {
     "static-dijkstra",
     "ecmp",
     "queue-q-learning",
+    "proactive-threshold",
 }
 
 ALGORITHM_CATALOG = [
@@ -33,24 +42,31 @@ ALGORITHM_CATALOG = [
         "available": False,
     },
     {
+        "id": "proactive-threshold",
+        "name": "Proactive queue-threshold agent",
+        "family": "proactive baseline",
+        "description": "Reroutes when a two-step occupancy projection reaches the congestion threshold.",
+        "available": True,
+    },
+    {
         "id": "static-dijkstra",
         "name": "Static Dijkstra",
         "family": "classical",
-        "description": "Shortest path selected by configured link delay.",
+        "description": "Shortest path selected by configured link delay; congestion reroutes are reactive.",
         "available": True,
     },
     {
         "id": "ecmp",
         "name": "ECMP",
         "family": "classical",
-        "description": "Seeded selection among equal-cost shortest paths.",
+        "description": "Seeded selection among equal-cost shortest paths; congestion reroutes are reactive.",
         "available": True,
     },
     {
         "id": "queue-q-learning",
         "name": "Tabular Q-learning",
         "family": "reinforcement learning",
-        "description": "Learns a per-tick LS/TS queue service-rate split from observed occupancy.",
+        "description": "Learns an LS/TS token-bucket rate split from observed queue occupancy.",
         "available": True,
     },
     {
@@ -64,18 +80,56 @@ ALGORITHM_CATALOG = [
         "id": "cheb-gcn-dqn",
         "name": "Chebyshev-GCN + DQN",
         "family": "research baseline",
-        "description": "Graph-convolutional occupancy encoder with a DQN routing policy.",
+        "description": "Graph-convolutional occupancy encoder with a DQN policy.",
         "available": False,
     },
 ]
+
+FLOW_COUNT_PER_CLASS = 4
+LS_PACKET_BYTES = 200
+TS_PACKET_BYTES = 1500
+LS_MAX_LINK_SHARE = 0.05
+LS_ON_MEAN_SECONDS = 1.5
+LS_OFF_MEAN_SECONDS = 1.5
+CONGESTION_THRESHOLD_PERCENT = 80.0
+PROACTIVE_LEAD_STEPS = 2
+RULE_INSTALLATION_MIN_SECONDS = 0.05
+RULE_INSTALLATION_MAX_SECONDS = 0.2
 
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _flow_seed(seed: int, flow_id: str) -> int:
+    digest = hashlib.sha256(f"{seed}:{flow_id}".encode("utf-8")).digest()
+    return int.from_bytes(digest[:8], "big")
+
+
+@dataclass
+class FlowState:
+    flow_id: str
+    traffic_class: str
+    source: str
+    destination: str
+    packet_bytes: int
+    arrival_rate_pps: float
+    seed: int
+    random_source: random.Random
+    path: list[str] = field(default_factory=list)
+    generated_packets: int = 0
+    delivered_packets: int = 0
+    dropped_packets: int = 0
+    latency_sum_ms: float = 0.0
+    reroutes: int = 0
+    rerouting: bool = False
+    done: bool = False
+    last_reroute_at: float = -math.inf
+    last_queue_levels: dict[str, float] = field(default_factory=dict)
+
+
 class SimulationManager(NetworkBackend):
-    """Thread-safe SimPy runner with a small, reproducible queueing model."""
+    """Thread-safe SimPy SDN simulator with seeded per-flow traffic streams."""
 
     def __init__(self, persist: bool = True) -> None:
         self._lock = threading.RLock()
@@ -83,8 +137,37 @@ class SimulationManager(NetworkBackend):
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
         self._metrics: deque[dict] = deque(maxlen=14 * 3600)
+        self._topology: TopologyDefinition = TOPOLOGIES["demo-7"]
+        self._graph = nx.Graph()
+        self._edge_attributes: dict[str, dict] = {}
+        self._link_status: dict[str, bool] = {}
+        self._output_ports: dict[str, OutputPortQueue] = {}
+        self._queues: dict[str, dict[str, float]] = {}
+        self._flows: list[FlowState] = []
+        self._flows_by_id: dict[str, FlowState] = {}
         self._link_utilization: dict[str, float] = {}
-        self._state = {
+        self._link_events: list[dict] = []
+        self._environment: simpy.Environment | None = None
+        self._queue_agent: QueueRateQLearningAgent | None = None
+        self._controller = SimulatedOpenFlowController()
+        self._random = random.Random(0)
+        self._service_split = 0.62
+        self._ls_rate = 50.0
+        self._ts_rate = 50.0
+        self._speed_mode = "realtime"
+        self._duration_seconds = 0
+        self._lost_packets = 0
+        self._delivered_packets = 0
+        self._generated_packets = 0
+        self._interval_delivered_bytes = 0
+        self._throughputs: list[float] = []
+        self._reroute_count = 0
+        self._build_network(self._topology, None)
+        self._controller.reset(list(self._queues))
+        self._state = self._idle_state()
+
+    def _idle_state(self) -> dict:
+        return {
             "id": "idle",
             "status": "idle",
             "topologyId": "demo-7",
@@ -95,38 +178,61 @@ class SimulationManager(NetworkBackend):
             "averageLatencyMs": 0.0,
             "throughputMbps": 0.0,
             "packetLossPercent": 0.0,
+            "droppedPackets": 0,
+            "transmitRateMbps": 0.0,
+            "speedMode": "realtime",
+            "flowMetrics": [],
+            "linkEvents": [],
+            "rerouteCount": 0,
             "updatedAt": _utc_now(),
         }
-        self._topology: TopologyDefinition = TOPOLOGIES["demo-7"]
-        self._queues: dict[str, dict[str, float]] = {
-            f"s{index}": {"ls": 0.0, "ts": 0.0}
-            for index in range(self._topology.node_count)
-        }
+
+    def _build_network(
+        self,
+        topology: TopologyDefinition,
+        environment: simpy.Environment | None,
+    ) -> None:
+        self._topology = topology
         self._graph = nx.Graph()
-        for index, (left, right) in enumerate(self._topology.edges):
-            delay = self._topology.delay_ms + ((index * 7) % 18)
-            self._graph.add_edge(
-                f"s{left}",
-                f"s{right}",
-                delay=float(delay),
-                weight=float(delay),
-                id=f"s{left}-s{right}",
-            )
-        self._environment: simpy.Environment | None = None
-        self._random = random.Random(0)
-        self._queue_agent: QueueRateQLearningAgent | None = None
-        self._ls_rate = 35.0
-        self._ts_rate = 50.0
-        self._lost_packets = 0
-        self._generated_packets = 0
-        self._latencies: list[float] = []
-        self._throughput_packets = 0.0
-        self._throughputs: list[float] = []
-        self._service_split = 0.62
-        self._controller = SimulatedOpenFlowController()
-        self._controller.reset(list(self._queues))
-        self._queue_capacity = 300.0
-        self._service_capacity = 95.0
+        self._graph.add_nodes_from(f"s{index}" for index in range(topology.node_count))
+        self._edge_attributes = {}
+        self._link_status = {}
+        self._output_ports = {}
+        self._link_utilization = {}
+        for index, (left_index, right_index) in enumerate(topology.edges):
+            left, right = f"s{left_index}", f"s{right_index}"
+            link_id = f"{left}-{right}"
+            delay = float(topology.delay_ms + ((index * 7) % 18))
+            attributes = {
+                "delay": delay,
+                "weight": delay,
+                "id": link_id,
+            }
+            self._edge_attributes[link_id] = attributes
+            self._link_status[link_id] = True
+            self._link_utilization[link_id] = 0.0
+            self._graph.add_edge(left, right, **attributes)
+            for source, target in ((left, right), (right, left)):
+                port = OutputPortQueue(
+                    source=source,
+                    target=target,
+                    bandwidth_mbps=topology.bandwidth_mbps,
+                )
+                self._output_ports[port.port_id] = port
+
+        self._queues = {
+            f"s{index}": {"ls": 0.0, "ts": 0.0}
+            for index in range(topology.node_count)
+        }
+        if environment is not None:
+            for port in self._output_ports.values():
+                environment.process(
+                    port.service_process(
+                        environment,
+                        self._service_rate_share,
+                        self._on_port_transmit,
+                    )
+                )
 
     def _configure(
         self,
@@ -136,40 +242,37 @@ class SimulationManager(NetworkBackend):
         seed: int,
         ls_rate: float,
         ts_rate: float,
+        speed_mode: str = "fast",
+        failure_schedule: dict | None = None,
     ) -> None:
-        self._topology = TOPOLOGIES[topology_id]
-        self._graph = nx.Graph()
-        for index, (left, right) in enumerate(self._topology.edges):
-            delay = self._topology.delay_ms + ((index * 7) % 18)
-            self._graph.add_edge(
-                f"s{left}",
-                f"s{right}",
-                delay=float(delay),
-                weight=float(delay),
-                id=f"s{left}-s{right}",
-            )
-        self._queues = {
-            f"s{index}": {"ls": 0.0, "ts": 0.0}
-            for index in range(self._topology.node_count)
-        }
-        self._controller.reset(list(self._queues))
-        self._link_utilization = {}
-        self._random = random.Random(seed)
-        self._queue_agent = (
-            QueueRateQLearningAgent(seed) if algorithm == "queue-q-learning" else None
-        )
+        self._stop_event.clear()
+        self._duration_seconds = duration_seconds
+        self._speed_mode = speed_mode
         self._ls_rate = ls_rate
         self._ts_rate = ts_rate
-        self._lost_packets = 0
-        self._generated_packets = 0
-        self._latencies = []
-        self._throughput_packets = 0.0
-        self._throughputs = []
+        self._random = random.Random(seed)
+        self._queue_agent = (
+            QueueRateQLearningAgent(seed)
+            if algorithm == "queue-q-learning"
+            else None
+        )
         self._service_split = 0.62
+        self._lost_packets = 0
+        self._delivered_packets = 0
+        self._generated_packets = 0
+        self._interval_delivered_bytes = 0
+        self._throughputs = []
+        self._reroute_count = 0
         self._metrics.clear()
-        self._stop_event.clear()
+        self._link_events = []
+        self._flows = []
+        self._flows_by_id = {}
         self._environment = simpy.Environment()
-        self._environment.process(self._tick_process())
+        self._controller.reset(
+            [f"s{index}" for index in range(TOPOLOGIES[topology_id].node_count)]
+        )
+        self._build_network(TOPOLOGIES[topology_id], self._environment)
+
         self._state = {
             "id": str(uuid.uuid4()),
             "status": "running",
@@ -177,12 +280,433 @@ class SimulationManager(NetworkBackend):
             "algorithm": algorithm,
             "elapsedSeconds": 0.0,
             "durationSeconds": duration_seconds,
-            "activeFlows": 0,
+            "activeFlows": FLOW_COUNT_PER_CLASS * 2,
             "averageLatencyMs": 0.0,
             "throughputMbps": 0.0,
             "packetLossPercent": 0.0,
+            "droppedPackets": 0,
+            "transmitRateMbps": 0.0,
+            "speedMode": speed_mode,
+            "flowMetrics": [],
+            "linkEvents": [],
+            "rerouteCount": 0,
             "updatedAt": _utc_now(),
         }
+        self._flows = self._create_flows(seed)
+        self._flows_by_id = {flow.flow_id: flow for flow in self._flows}
+        for flow in self._flows:
+            flow.path = self._find_route(flow)
+            if flow.path:
+                self._controller.record_path(flow.path, flow.traffic_class, 0)
+            self._environment.process(self._flow_process(flow))
+
+        self._environment.process(self._stats_poll_process())
+        if failure_schedule:
+            self._environment.process(self._failure_process(failure_schedule))
+
+        self._state["activeFlows"] = len(self._flows)
+
+    def _create_flows(self, seed: int) -> list[FlowState]:
+        nodes = list(self._graph.nodes)
+        total_link_bps = self._topology.bandwidth_mbps * 1_000_000
+        ls_average_bps = total_link_bps * LS_MAX_LINK_SHARE * self._ls_rate / 100
+        ts_total_bps = total_link_bps * self._ts_rate / 100
+        flows: list[FlowState] = []
+        for traffic_class, packet_bytes, total_bps in (
+            ("ls", LS_PACKET_BYTES, ls_average_bps),
+            ("ts", TS_PACKET_BYTES, ts_total_bps),
+        ):
+            per_flow_bps = total_bps / FLOW_COUNT_PER_CLASS
+            if traffic_class == "ls":
+                # LS is active half the time; double its active-burst rate.
+                per_flow_bps *= 2
+            rate_pps = per_flow_bps / (packet_bytes * 8)
+            for index in range(FLOW_COUNT_PER_CLASS):
+                flow_id = f"{traffic_class}-{index + 1}"
+                flow_seed = _flow_seed(seed, flow_id)
+                random_source = random.Random(flow_seed)
+                source, destination = random_source.sample(nodes, 2)
+                flows.append(
+                    FlowState(
+                        flow_id=flow_id,
+                        traffic_class=traffic_class,
+                        source=source,
+                        destination=destination,
+                        packet_bytes=packet_bytes,
+                        arrival_rate_pps=rate_pps,
+                        seed=flow_seed,
+                        random_source=random_source,
+                    )
+                )
+        return flows
+
+    def _flow_process(self, flow: FlowState) -> Iterator[simpy.Event]:
+        environment = self._environment
+        if environment is None:
+            return
+        duration = float(self._duration_seconds)
+        if flow.arrival_rate_pps <= 0:
+            yield environment.timeout(duration)
+            flow.done = True
+            return
+
+        if flow.traffic_class == "ls":
+            while environment.now < duration:
+                on_duration = flow.random_source.expovariate(1 / LS_ON_MEAN_SECONDS)
+                burst_end = min(duration, environment.now + on_duration)
+                while environment.now < burst_end:
+                    interval = flow.random_source.expovariate(
+                        flow.arrival_rate_pps
+                    )
+                    if environment.now + interval >= burst_end:
+                        yield environment.timeout(burst_end - environment.now)
+                        break
+                    yield environment.timeout(interval)
+                    self._generate_packet(flow)
+                if environment.now < duration:
+                    off_duration = flow.random_source.expovariate(
+                        1 / LS_OFF_MEAN_SECONDS
+                    )
+                    yield environment.timeout(min(off_duration, duration - environment.now))
+        else:
+            interval = 1 / flow.arrival_rate_pps
+            yield environment.timeout(flow.random_source.random() * interval)
+            while environment.now < duration:
+                self._generate_packet(flow)
+                yield environment.timeout(interval)
+        flow.done = True
+
+    def _generate_packet(self, flow: FlowState) -> None:
+        environment = self._environment
+        if environment is None:
+            return
+        flow.generated_packets += 1
+        self._generated_packets += 1
+        self._controller.record_path(flow.path, flow.traffic_class, 1)
+        if len(flow.path) < 2:
+            self._drop_flow_packet(flow)
+            return
+        packet = Packet(
+            flow_id=flow.flow_id,
+            traffic_class=flow.traffic_class,
+            size_bytes=flow.packet_bytes,
+            created_at=float(environment.now),
+            path=list(flow.path),
+        )
+        self._enqueue_packet(packet)
+
+    def _enqueue_packet(self, packet: Packet) -> None:
+        if packet.hop_index >= len(packet.path) - 1:
+            self._deliver_packet(packet)
+            return
+        source = packet.path[packet.hop_index]
+        target = packet.path[packet.hop_index + 1]
+        port = self._output_ports.get(f"{source}:{target}")
+        if port is None or not port.enqueue(packet):
+            self._drop_packet(packet)
+
+    def _on_port_transmit(self, packet: Packet, port: OutputPortQueue) -> None:
+        self._controller.record_port_transmission(port.source, port.target)
+        packet.hop_index += 1
+        if packet.hop_index >= len(packet.path) - 1:
+            self._deliver_packet(packet)
+        else:
+            self._enqueue_packet(packet)
+
+    def _deliver_packet(self, packet: Packet) -> None:
+        environment = self._environment
+        if environment is None:
+            return
+        flow = self._flows_by_id[packet.flow_id]
+        flow.delivered_packets += 1
+        flow.latency_sum_ms += max(0.0, float(environment.now) - packet.created_at) * 1000
+        self._delivered_packets += 1
+        self._interval_delivered_bytes += packet.size_bytes
+
+    def _drop_flow_packet(self, flow: FlowState) -> None:
+        flow.dropped_packets += 1
+        self._lost_packets += 1
+
+    def _drop_packet(self, packet: Packet) -> None:
+        self._drop_flow_packet(self._flows_by_id[packet.flow_id])
+
+    def _service_rate_share(self, switch_id: str) -> float:
+        return self._controller.queue_rate(switch_id, self._service_split)
+
+    def _find_route(
+        self,
+        flow: FlowState,
+        avoid_ports: set[str] | None = None,
+    ) -> list[str]:
+        graph = self._graph
+        if avoid_ports:
+            graph = self._graph.copy()
+            for port_id in avoid_ports:
+                source, target = port_id.split(":", 1)
+                if graph.has_edge(source, target):
+                    graph.remove_edge(source, target)
+        try:
+            if self._state.get("algorithm") == "ecmp":
+                paths = list(
+                    nx.all_shortest_paths(
+                        graph,
+                        flow.source,
+                        flow.destination,
+                        weight="weight",
+                    )
+                )
+                return flow.random_source.choice(paths)
+            return nx.shortest_path(
+                graph,
+                flow.source,
+                flow.destination,
+                weight="weight",
+            )
+        except (nx.NetworkXNoPath, nx.NodeNotFound):
+            return []
+
+    def _failure_process(self, schedule: dict) -> Iterator[simpy.Event]:
+        environment = self._environment
+        if environment is None:
+            return
+        down_at = float(schedule["downSeconds"])
+        up_at = float(schedule["upSeconds"])
+        yield environment.timeout(down_at)
+        self._set_link_state(schedule["linkId"], False)
+        yield environment.timeout(up_at - down_at)
+        self._set_link_state(schedule["linkId"], True)
+
+    def _set_link_state(self, link_id: str, is_up: bool) -> None:
+        environment = self._environment
+        if environment is None or self._link_status.get(link_id) == is_up:
+            return
+        left, right = link_id.split("-", 1)
+        if is_up:
+            self._graph.add_edge(left, right, **self._edge_attributes[link_id])
+        elif self._graph.has_edge(left, right):
+            self._graph.remove_edge(left, right)
+
+        pending_packets: list[Packet] = []
+        for source, target in ((left, right), (right, left)):
+            port = self._output_ports[f"{source}:{target}"]
+            pending_packets.extend(port.set_link_state(is_up))
+        for packet in pending_packets:
+            self._drop_packet(packet)
+
+        self._link_status[link_id] = is_up
+        self._link_utilization[link_id] = 0.0
+        event = {
+            "linkId": link_id,
+            "status": "up" if is_up else "down",
+            "elapsedSeconds": round(float(environment.now), 3),
+        }
+        self._link_events.append(event)
+
+        for flow in self._flows:
+            uses_link = any(
+                {source, target} == {left, right}
+                for source, target in zip(flow.path, flow.path[1:])
+            )
+            if not flow.done and (is_up or uses_link):
+                self._schedule_reroute(flow)
+
+    def _schedule_reroute(
+        self,
+        flow: FlowState,
+        avoid_ports: set[str] | None = None,
+    ) -> None:
+        environment = self._environment
+        if environment is None or flow.done or flow.rerouting:
+            return
+        flow.rerouting = True
+        delay = flow.random_source.uniform(
+            RULE_INSTALLATION_MIN_SECONDS,
+            RULE_INSTALLATION_MAX_SECONDS,
+        )
+        environment.process(self._install_route_after_delay(flow, delay, avoid_ports or set()))
+
+    def _install_route_after_delay(
+        self,
+        flow: FlowState,
+        delay: float,
+        avoid_ports: set[str],
+    ) -> Iterator[simpy.Event]:
+        environment = self._environment
+        if environment is None:
+            return
+        yield environment.timeout(delay)
+        route = self._find_route(flow, avoid_ports)
+        if route != flow.path:
+            flow.path = route
+            flow.reroutes += 1
+            self._reroute_count += 1
+            flow.last_queue_levels.clear()
+            if route:
+                self._controller.record_path(route, flow.traffic_class, 0)
+        flow.last_reroute_at = float(environment.now)
+        flow.rerouting = False
+
+    def _stats_poll_process(self) -> Iterator[simpy.Event]:
+        environment = self._environment
+        if environment is None:
+            return
+        while True:
+            yield environment.timeout(1)
+            with self._lock:
+                if self._state.get("status") != "running":
+                    return
+                self._poll_stats()
+                self._check_congestion_reroutes()
+
+    def _check_congestion_reroutes(self) -> None:
+        environment = self._environment
+        if environment is None:
+            return
+        proactive = self._state.get("algorithm") == "proactive-threshold"
+        for flow in self._flows:
+            if (
+                flow.done
+                or flow.rerouting
+                or environment.now - flow.last_reroute_at < 1
+            ):
+                continue
+            levels: dict[str, float] = {}
+            avoid_ports: set[str] = set()
+            for source, target in zip(flow.path, flow.path[1:]):
+                port_id = f"{source}:{target}"
+                port = self._output_ports.get(port_id)
+                if port is None:
+                    continue
+                level = max(
+                    port.occupancy_percent("ls"),
+                    port.occupancy_percent("ts"),
+                )
+                previous = flow.last_queue_levels.get(port_id, level)
+                projected = level + PROACTIVE_LEAD_STEPS * max(0.0, level - previous)
+                trigger_level = projected if proactive else level
+                if trigger_level >= CONGESTION_THRESHOLD_PERCENT:
+                    avoid_ports.add(port_id)
+                levels[port_id] = level
+            flow.last_queue_levels = levels
+            if avoid_ports:
+                self._schedule_reroute(flow, avoid_ports)
+
+    def _mean_queue_percent(self, traffic_class: str) -> float:
+        if not self._output_ports:
+            return 0.0
+        return sum(
+            port.occupancy_percent(traffic_class)
+            for port in self._output_ports.values()
+        ) / len(self._output_ports)
+
+    def _poll_stats(self) -> None:
+        environment = self._environment
+        if environment is None:
+            return
+        elapsed = float(environment.now)
+        timestamp = time.time()
+        points = [
+            port.sample_and_reset(elapsed, timestamp)
+            for port in self._output_ports.values()
+        ]
+        self._metrics.extend(points)
+        for switch_queue in self._queues.values():
+            switch_queue["ls"] = 0.0
+            switch_queue["ts"] = 0.0
+        switch_port_counts = {switch_id: 0 for switch_id in self._queues}
+        for port, point in zip(self._output_ports.values(), points):
+            self._queues[port.source]["ls"] += point["lsOccupancy"]
+            self._queues[port.source]["ts"] += point["tsOccupancy"]
+            switch_port_counts[port.source] += 1
+        for switch_id, count in switch_port_counts.items():
+            if count:
+                self._queues[switch_id]["ls"] /= count
+                self._queues[switch_id]["ts"] /= count
+
+        if self._queue_agent is not None:
+            self._service_split = self._queue_agent.choose_rate(
+                self._mean_queue_percent("ls"),
+                self._mean_queue_percent("ts"),
+            )
+        total_tx_mbps = sum(point["transmitRateMbps"] for point in points)
+        for link_id in self._link_status:
+            left, right = link_id.split("-", 1)
+            direction_rates = [
+                point["transmitRateMbps"]
+                for port, point in zip(self._output_ports.values(), points)
+                if (port.source, port.target) in ((left, right), (right, left))
+            ]
+            self._link_utilization[link_id] = (
+                min(
+                    100.0,
+                    max(direction_rates, default=0.0)
+                    / max(self._topology.bandwidth_mbps, 1e-9)
+                    * 100,
+                )
+                if self._link_status[link_id]
+                else 0.0
+            )
+        if self._persist:
+            save_queue_samples(points)
+
+        mean_latency = (
+            sum(flow.latency_sum_ms for flow in self._flows)
+            / self._delivered_packets
+            if self._delivered_packets
+            else 0.0
+        )
+        loss_percent = (
+            self._lost_packets * 100 / self._generated_packets
+            if self._generated_packets
+            else 0.0
+        )
+        throughput_mbps = self._interval_delivered_bytes * 8 / 1_000_000
+        self._throughputs.append(throughput_mbps)
+        self._interval_delivered_bytes = 0
+        self._state.update(
+            {
+                "elapsedSeconds": elapsed,
+                "activeFlows": sum(not flow.done for flow in self._flows),
+                "averageLatencyMs": round(mean_latency, 3),
+                "throughputMbps": round(throughput_mbps, 6),
+                "packetLossPercent": round(loss_percent, 4),
+                "droppedPackets": self._lost_packets,
+                "transmitRateMbps": round(total_tx_mbps, 6),
+                "flowMetrics": self._flow_metrics(),
+                "linkEvents": [dict(event) for event in self._link_events],
+                "rerouteCount": self._reroute_count,
+                "updatedAt": _utc_now(),
+            }
+        )
+
+    def _flow_metrics(self) -> list[dict]:
+        result = []
+        for flow in self._flows:
+            loss = (
+                flow.dropped_packets * 100 / flow.generated_packets
+                if flow.generated_packets
+                else 0.0
+            )
+            latency = (
+                flow.latency_sum_ms / flow.delivered_packets
+                if flow.delivered_packets
+                else 0.0
+            )
+            result.append(
+                {
+                    "flowId": flow.flow_id,
+                    "trafficClass": flow.traffic_class,
+                    "source": flow.source,
+                    "destination": flow.destination,
+                    "generatedPackets": flow.generated_packets,
+                    "deliveredPackets": flow.delivered_packets,
+                    "droppedPackets": flow.dropped_packets,
+                    "meanLatencyMs": round(latency, 3),
+                    "lossPercent": round(loss, 4),
+                    "reroutes": flow.reroutes,
+                }
+            )
+        return result
 
     def start(
         self,
@@ -192,16 +716,42 @@ class SimulationManager(NetworkBackend):
         seed: int,
         ls_rate: float,
         ts_rate: float,
+        speed_mode: str = "realtime",
+        failure_schedule: dict | None = None,
     ) -> dict:
         if topology_id not in TOPOLOGIES:
             raise ValueError(f"Unknown topology: {topology_id}")
         if algorithm not in AVAILABLE_ALGORITHMS:
             raise ValueError(f"Algorithm is not available: {algorithm}")
+        if speed_mode not in {"fast", "realtime"}:
+            raise ValueError("speed_mode must be 'fast' or 'realtime'.")
+        if failure_schedule:
+            link_ids = {
+                f"s{left}-s{right}"
+                for left, right in TOPOLOGIES[topology_id].edges
+            }
+            if failure_schedule.get("linkId") not in link_ids:
+                raise ValueError("Failure schedule refers to an unknown topology link.")
+            if (
+                not 0 <= failure_schedule["downSeconds"] < failure_schedule["upSeconds"]
+                <= duration_seconds
+            ):
+                raise ValueError(
+                    "Failure down/up times must be ordered and within the run duration."
+                )
+
         with self._lock:
             if self._state["status"] == "running":
                 raise RuntimeError("Stop the current simulation before starting another.")
             self._configure(
-                topology_id, algorithm, duration_seconds, seed, ls_rate, ts_rate
+                topology_id,
+                algorithm,
+                duration_seconds,
+                seed,
+                ls_rate,
+                ts_rate,
+                speed_mode,
+                failure_schedule,
             )
             if self._persist:
                 self._thread = threading.Thread(
@@ -220,181 +770,18 @@ class SimulationManager(NetworkBackend):
             with self._lock:
                 if self._state["status"] != "running":
                     return
-                if self._state["elapsedSeconds"] >= self._state["durationSeconds"]:
+                if self._state["elapsedSeconds"] >= self._duration_seconds:
                     self._state["status"] = "completed"
+                    self._state["activeFlows"] = 0
                     self._state["updatedAt"] = _utc_now()
                     return
-            environment.run(until=environment.now + 1.00001)
-            if self._stop_event.wait(1.0):
-                return
-
-    def _tick_process(self):
-        while True:
-            yield self._environment.timeout(1)
-            with self._lock:
-                if self._state["status"] != "running":
+                target = min(float(environment.now) + 0.1, self._duration_seconds + 0.00001)
+                environment.run(until=target)
+            if self._speed_mode == "realtime":
+                if self._stop_event.wait(0.1):
                     return
-                if self._state["elapsedSeconds"] >= self._state["durationSeconds"]:
-                    self._state["status"] = "completed"
-                    self._state["updatedAt"] = _utc_now()
-                    return
-                self._advance()
-
-    def _poisson(self, mean: float) -> int:
-        if mean <= 0:
-            return 0
-        threshold = math.exp(-mean)
-        product = 1.0
-        count = 0
-        while product > threshold:
-            count += 1
-            product *= self._random.random()
-        return count - 1
-
-    def _candidate_paths(self, source: str, target: str) -> list[list[str]]:
-        try:
-            return list(islice(nx.shortest_simple_paths(self._graph, source, target, weight="weight"), 4))
-        except (nx.NetworkXNoPath, nx.NodeNotFound):
-            return []
-
-    def _choose_path(self, source: str, target: str) -> list[str]:
-        algorithm = self._state["algorithm"]
-        if algorithm == "ecmp":
-            try:
-                paths = list(nx.all_shortest_paths(self._graph, source, target, weight="weight"))
-            except (nx.NetworkXNoPath, nx.NodeNotFound):
-                return []
-            return self._random.choice(paths)
-        if algorithm == "queue-q-learning":
-            paths = self._candidate_paths(source, target)
-            if not paths:
-                return []
-            return min(
-                paths,
-                key=lambda path: sum(
-                    self._queues[node]["ls"] + self._queues[node]["ts"]
-                    for node in path[1:-1]
-                ),
-            )
-        try:
-            return nx.shortest_path(self._graph, source, target, weight="weight")
-        except (nx.NetworkXNoPath, nx.NodeNotFound):
-            return []
-
-    def _send_packets(
-        self,
-        traffic_class: str,
-        count: int,
-        link_load: dict[str, int],
-    ) -> int:
-        nodes = list(self._queues)
-        accepted = 0
-        for _ in range(count):
-            source, target = self._random.sample(nodes, 2)
-            path = self._choose_path(source, target)
-            if len(path) < 2:
-                self._lost_packets += 1
-                continue
-            self._generated_packets += 1
-            queue_nodes = path[1:-1]
-            if any(
-                sum(self._queues[node].values()) >= self._queue_capacity
-                for node in queue_nodes
-            ):
-                self._lost_packets += 1
-                continue
-            accepted += 1
-            self._controller.record_path(path, traffic_class, 1)
-            for node in queue_nodes:
-                self._queues[node][traffic_class] += 1
-            path_delay = sum(
-                self._graph[left][right]["delay"]
-                for left, right in zip(path, path[1:])
-            )
-            queue_delay = sum(
-                sum(self._queues[node].values()) / self._queue_capacity * 10
-                for node in queue_nodes
-            )
-            self._latencies.append(path_delay + queue_delay)
-            for left, right in zip(path, path[1:]):
-                edge_id = self._graph[left][right]["id"]
-                link_load[edge_id] = link_load.get(edge_id, 0) + 1
-        return accepted
-
-    def _advance(self) -> None:
-        ls_mean = self._ls_rate * 0.65
-        ts_count = int(self._ts_rate * 0.65)
-        ls_count = self._poisson(ls_mean)
-        link_load: dict[str, int] = {}
-        accepted_ls = self._send_packets("ls", ls_count, link_load)
-        accepted_ts = self._send_packets("ts", ts_count, link_load)
-
-        average_ls = sum(queue["ls"] for queue in self._queues.values()) / max(
-            len(self._queues), 1
-        )
-        average_ts = sum(queue["ts"] for queue in self._queues.values()) / max(
-            len(self._queues), 1
-        )
-        if self._queue_agent is not None:
-            self._service_split = self._queue_agent.choose_rate(average_ls, average_ts)
-
-        served = 0.0
-        for switch_id, queue in self._queues.items():
-            switch_split = self._controller.queue_rate(
-                switch_id, self._service_split
-            )
-            ls_service = self._service_capacity * switch_split
-            ts_service = self._service_capacity - ls_service
-            ls_served = min(queue["ls"], ls_service)
-            ts_served = min(queue["ts"], ts_service)
-            queue["ls"] -= ls_served
-            queue["ts"] -= ts_served
-            served += ls_served + ts_served
-
-        for link in self._topology.edges:
-            left, right = link
-            link_id = f"s{left}-s{right}"
-            reverse_id = f"s{right}-s{left}"
-            load = link_load.get(link_id, link_load.get(reverse_id, 0))
-            self._link_utilization[link_id] = min(100.0, load * 1.5)
-
-        self._throughput_packets = served
-        self._throughputs.append(served * 1200 * 8 / 1_000_000)
-        elapsed = float(self._state["elapsedSeconds"] + 1)
-        average_latency = (
-            sum(self._latencies) / len(self._latencies) if self._latencies else 0.0
-        )
-        loss = (
-            100 * self._lost_packets / self._generated_packets
-            if self._generated_packets
-            else 0.0
-        )
-        points = []
-        timestamp = time.time()
-        for switch_id, queue in self._queues.items():
-            point = {
-                "timestamp": timestamp,
-                "elapsedSeconds": elapsed,
-                "switchId": switch_id,
-                "lsOccupancy": round(queue["ls"] / self._queue_capacity * 100, 3),
-                "tsOccupancy": round(queue["ts"] / self._queue_capacity * 100, 3),
-                "capacity": 100.0,
-            }
-            self._metrics.append(point)
-            points.append(point)
-
-        self._state.update(
-            {
-                "elapsedSeconds": elapsed,
-                "activeFlows": int(accepted_ls + accepted_ts),
-                "averageLatencyMs": round(average_latency, 3),
-                "throughputMbps": round(served * 1200 * 8 / 1_000_000, 3),
-                "packetLossPercent": round(loss, 3),
-                "updatedAt": _utc_now(),
-            }
-        )
-        if self._persist:
-            save_queue_samples(points)
+            else:
+                time.sleep(0)
 
     def stop(self) -> dict:
         with self._lock:
@@ -402,31 +789,29 @@ class SimulationManager(NetworkBackend):
                 self._state["status"] = "stopped"
                 self._state["updatedAt"] = _utc_now()
                 self._stop_event.set()
-            return dict(self._state)
+            return self.snapshot()
 
     def reset(self) -> dict:
         self.stop()
         with self._lock:
             self._metrics.clear()
-            self._link_utilization = {}
-            self._state = {
-                "id": "idle",
-                "status": "idle",
-                "topologyId": "demo-7",
-                "algorithm": "static-dijkstra",
-                "elapsedSeconds": 0.0,
-                "durationSeconds": 0,
-                "activeFlows": 0,
-                "averageLatencyMs": 0.0,
-                "throughputMbps": 0.0,
-                "packetLossPercent": 0.0,
-                "updatedAt": _utc_now(),
-            }
-            return dict(self._state)
+            self._flows = []
+            self._flows_by_id = {}
+            self._link_events = []
+            self._environment = None
+            self._build_network(TOPOLOGIES["demo-7"], None)
+            self._controller.reset(list(self._queues))
+            self._queue_agent = None
+            self._state = self._idle_state()
+            return self.snapshot()
 
     def snapshot(self) -> dict:
         with self._lock:
-            return dict(self._state)
+            return {
+                **self._state,
+                "flowMetrics": [dict(flow) for flow in self._state["flowMetrics"]],
+                "linkEvents": [dict(event) for event in self._state["linkEvents"]],
+            }
 
     def topologies(self) -> list[dict]:
         with self._lock:
@@ -434,7 +819,8 @@ class SimulationManager(NetworkBackend):
                 topology.as_dict(
                     self._link_utilization
                     if topology_id == self._state["topologyId"]
-                    else None
+                    else None,
+                    self._link_status if topology_id == self._state["topologyId"] else None,
                 )
                 for topology_id, topology in TOPOLOGIES.items()
             ]
@@ -478,24 +864,34 @@ class SimulationManager(NetworkBackend):
         seed: int,
     ) -> dict:
         runner = cls(persist=False)
-        runner._configure(topology_id, algorithm, duration_seconds, seed, 35, 50)
+        runner._configure(
+            topology_id,
+            algorithm,
+            duration_seconds,
+            seed,
+            35,
+            50,
+            speed_mode="fast",
+        )
         environment = runner._environment
-        for _ in range(duration_seconds):
-            environment.run(until=environment.now + 1.00001)
-        samples = list(runner._metrics)
+        if environment is None:
+            raise RuntimeError("Simulation environment did not initialize.")
+        environment.run(until=duration_seconds + 0.00001)
+        runner._state["status"] = "completed"
+        runner._state["activeFlows"] = 0
         queue_occupancy = [
-            point["lsOccupancy"] + point["tsOccupancy"] for point in samples
+            point["lsOccupancy"] + point["tsOccupancy"]
+            for point in runner._metrics
         ]
-        state = runner.snapshot()
         return {
             "algorithm": algorithm,
-            "meanLatencyMs": state["averageLatencyMs"],
+            "meanLatencyMs": runner._state["averageLatencyMs"],
             "throughputMbps": round(
-                sum(runner._throughputs) / len(runner._throughputs), 3
+                sum(runner._throughputs) / len(runner._throughputs), 6
             )
             if runner._throughputs
             else 0.0,
-            "packetLossPercent": state["packetLossPercent"],
+            "packetLossPercent": runner._state["packetLossPercent"],
             "meanQueueOccupancy": round(
                 sum(queue_occupancy) / len(queue_occupancy), 3
             )

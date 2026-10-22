@@ -14,7 +14,11 @@ class TopologyDefinition:
     bandwidth_mbps: float
     delay_ms: float
 
-    def as_dict(self, link_utilization: dict[str, float] | None = None) -> dict:
+    def as_dict(
+        self,
+        link_utilization: dict[str, float] | None = None,
+        link_status: dict[str, bool] | None = None,
+    ) -> dict:
         radius = 39
         center_x = center_y = 50
         nodes = []
@@ -40,6 +44,7 @@ class TopologyDefinition:
                     "bandwidthMbps": self.bandwidth_mbps,
                     "delayMs": self.delay_ms + ((index * 7) % 18),
                     "utilization": round((link_utilization or {}).get(link_id, 0), 1),
+                    "isUp": (link_status or {}).get(link_id, True),
                 }
             )
         return {

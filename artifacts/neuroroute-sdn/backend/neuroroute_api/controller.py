@@ -42,10 +42,10 @@ class SimulatedOpenFlowController:
                 },
             )
             entry["packets"] += packet_count
-        for source, target in zip(path, path[1:]):
-            port_key = f"{source}:{target}"
-            self._port_counters[port_key]["txPackets"] += packet_count
-            self._port_counters[f"{target}:{source}"]["rxPackets"] += packet_count
+
+    def record_port_transmission(self, source: str, target: str) -> None:
+        self._port_counters[f"{source}:{target}"]["txPackets"] += 1
+        self._port_counters[f"{target}:{source}"]["rxPackets"] += 1
 
     def install_flow_rule(self, switch_id: str, rule: dict) -> dict:
         if switch_id not in self._flow_tables:
@@ -80,19 +80,38 @@ class SimulatedOpenFlowController:
         return self._queue_rates.get(switch_id, default)
 
     def state(self, metric_points: list[dict]) -> dict:
-        latest: dict[str, dict] = {}
-        for point in metric_points:
-            latest[point["switchId"]] = point
+        latest_elapsed = max(
+            (point["elapsedSeconds"] for point in metric_points),
+            default=None,
+        )
+        latest_by_switch: dict[str, list[dict]] = defaultdict(list)
+        if latest_elapsed is not None:
+            for point in metric_points:
+                if point["elapsedSeconds"] == latest_elapsed:
+                    latest_by_switch[point["switchId"]].append(point)
         switches = []
         for switch_id in sorted(self._flow_tables):
-            metric = latest.get(switch_id, {})
+            points = latest_by_switch.get(switch_id, [])
+            count = max(len(points), 1)
             switches.append(
                 {
                     "switchId": switch_id,
                     "flowTable": list(self._flow_tables[switch_id].values()),
                     "queues": {
-                        "lsOccupancy": metric.get("lsOccupancy", 0.0),
-                        "tsOccupancy": metric.get("tsOccupancy", 0.0),
+                        "lsOccupancy": round(
+                            sum(point["lsOccupancy"] for point in points) / count, 3
+                        ),
+                        "tsOccupancy": round(
+                            sum(point["tsOccupancy"] for point in points) / count, 3
+                        ),
+                        "droppedPackets": sum(
+                            point.get("lsDrops", 0) + point.get("tsDrops", 0)
+                            for point in points
+                        ),
+                        "transmitRateMbps": round(
+                            sum(point.get("transmitRateMbps", 0.0) for point in points),
+                            6,
+                        ),
                         "lsRatePercent": round(
                             self.queue_rate(switch_id, 0.62) * 100, 2
                         ),
