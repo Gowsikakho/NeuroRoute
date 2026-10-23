@@ -2,13 +2,10 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { startPythonBackend, proxyPythonWebSocket } from "./lib/python-backend";
 
-const rawPort = process.env["PORT"];
-
-if (!rawPort) {
-  throw new Error(
-    "PORT environment variable is required but was not provided.",
-  );
-}
+// PORT is normally provided by the hosting environment; default to the Express
+// convention so `pnpm --filter @workspace/api-server run dev` also works on a
+// machine that does not set it.
+const rawPort = process.env["PORT"] ?? "3000";
 
 const port = Number(rawPort);
 

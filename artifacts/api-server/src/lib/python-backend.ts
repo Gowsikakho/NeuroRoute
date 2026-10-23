@@ -9,7 +9,17 @@ import { logger } from "./logger";
 
 const PYTHON_PORT = Number(process.env["NEUROROUTE_API_PORT"] ?? 18081);
 const PYTHON_HOST = "127.0.0.1";
-const PYTHON_REQUEST_TIMEOUT_MS = 5_000;
+const PYTHON_REQUEST_TIMEOUT_MS = Number(
+  process.env["NEUROROUTE_PROXY_TIMEOUT_MS"] ?? 5_000,
+);
+// These endpoints run whole simulations synchronously before answering, so they
+// take far longer than an ordinary API call: the dashboard's default
+// comparison (120s x 2 algorithms) measures ~105 seconds wall clock. They get a
+// separate, configurable budget instead of the normal fast-fail timeout.
+const LONG_RUNNING_TIMEOUT_MS = Number(
+  process.env["NEUROROUTE_LONG_PROXY_TIMEOUT_MS"] ?? 600_000,
+);
+const LONG_RUNNING_PATHS = new Set(["/api/experiments/run"]);
 
 export function startPythonBackend(): ChildProcess {
   const workspaceRoot = path.resolve(import.meta.dirname, "../../../");
@@ -66,6 +76,10 @@ export async function proxyPythonRequest(
   res: Response,
 ): Promise<void> {
   const upstreamUrl = `http://${PYTHON_HOST}:${PYTHON_PORT}${req.originalUrl}`;
+  const requestPath = req.originalUrl.split("?")[0] ?? "";
+  const timeoutMs = LONG_RUNNING_PATHS.has(requestPath)
+    ? LONG_RUNNING_TIMEOUT_MS
+    : PYTHON_REQUEST_TIMEOUT_MS;
   const headers: Record<string, string> = {};
   const contentType = req.header("content-type");
   if (contentType) headers["content-type"] = contentType;
@@ -76,7 +90,7 @@ export async function proxyPythonRequest(
     const response = await fetch(upstreamUrl, {
       method: req.method,
       headers,
-      signal: AbortSignal.timeout(PYTHON_REQUEST_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
       body:
         req.method === "GET" || req.method === "HEAD"
           ? undefined
@@ -95,7 +109,7 @@ export async function proxyPythonRequest(
         ? (error as { name?: string; cause?: { code?: string; name?: string } })
         : {};
     const cause = details.name === "TimeoutError" || details.cause?.name === "TimeoutError"
-      ? `timed out after ${PYTHON_REQUEST_TIMEOUT_MS / 1000} seconds`
+      ? `timed out after ${timeoutMs / 1000} seconds`
       : details.cause?.code === "ECONNREFUSED"
         ? "connection was refused"
         : "could not be reached";
