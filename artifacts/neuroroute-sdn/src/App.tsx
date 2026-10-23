@@ -34,7 +34,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         <Link href={href} key={href} className={`nav-link ${location === href ? 'active' : ''}`} data-testid={`link-nav-${label.toLowerCase().replaceAll(' ', '-')}`}><Icon size={16} /><span>{label}</span></Link>)}</nav>
       <div className="sidebar-bottom"><div className="connection"><i className="pulse-dot" /> Local simulator interface</div><div className="sidebar-note">EXPERIMENT CONTROL<br />RESEARCH BUILD · VALIDATION PENDING</div></div>
     </aside>
-    <div className="main-area"><header className="topbar"><div className="crumb">NeuroRoute <span style={{ color: '#b3b9b0' }}>/</span> SDN research console</div><div className="top-right"><span className="env-pill">LOCAL WORKSPACE</span><span>CONTROL ROOM&nbsp; 01</span></div></header>{children}</div>
+    <div className="main-area"><header className="topbar"><div className="crumb">NeuroRoute <span style={{ color: '#cfc3d8' }}>/</span> SDN research console</div><div className="top-right"><span className="env-pill">LOCAL WORKSPACE</span><span>CONTROL ROOM&nbsp; 01</span></div></header>{children}</div>
   </div>;
 }
 
@@ -108,7 +108,7 @@ function TopologyView({ topology, resetVersion }: { topology?: Topology; resetVe
   const maxUtilization = Math.max(0, ...links.map(link => link.utilization));
   const graphEdges: Edge[] = links.map(link => {
     const relativeLoad = maxUtilization > 0 ? link.utilization / maxUtilization : 0;
-    const color = relativeLoad >= 0.75 ? '#d4a72c' : relativeLoad >= 0.4 ? '#8a7590' : '#c2cbd4';
+    const color = relativeLoad >= 0.75 ? '#d4a72c' : relativeLoad >= 0.4 ? '#8a7590' : '#c9c1d6';
     return {
       id: link.id,
       source: link.source,
@@ -137,9 +137,9 @@ function TopologyView({ topology, resetVersion }: { topology?: Topology; resetVe
       elementsSelectable
       aria-label={`${topology.name} interactive network topology`}
     >
-      <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#d4ddd3" />
+      <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#cec5da" />
       <Controls showInteractive={false} />
-      <MiniMap position="top-right" nodeColor="#43866f" pannable zoomable />
+      <MiniMap position="top-right" nodeColor="#7a5b85" pannable zoomable />
     </ReactFlow> : nodesReady ? <EmptyBlock title="Topology has no nodes" copy="The selected topology does not provide node coordinates." /> : <div className="topology-preparing">Preparing topology layout…</div>}
     <div className="canvas-meta">{topology.nodeCount} NODES&nbsp; / &nbsp;{topology.linkCount} LINKS</div>
   </div>;
@@ -324,7 +324,7 @@ function Dashboard() {
           <Panel title="Network topology" icon={Network} meta={topology?.name || 'CATALOG'} className="topology-panel">
             <div className="panel-body" style={{ paddingTop: 13 }}>
               {topologies.data?.length ? <><div className="topology-toolbar"><div className="field" style={{ maxWidth: 280 }}><label htmlFor="topology-select">Active topology</label><select id="topology-select" value={topologyId} onChange={e => setTopologyId(e.target.value)} data-testid="select-topology">{topologies.data.map(t => <option value={t.id} key={t.id}>{t.name}</option>)}</select></div><button className="btn btn-quiet" onClick={() => setLayoutResetVersion(version => version + 1)} disabled={!topology} data-testid="button-reset-layout"><RotateCcw size={13} />Reset layout</button></div>
-                <TopologyView topology={topology} resetVersion={layoutResetVersion} /><p style={{ fontSize: 10, lineHeight: 1.6, color: '#77847d', margin: '10px 0 0' }}>{topology?.description}</p></>
+                <TopologyView topology={topology} resetVersion={layoutResetVersion} /><p style={{ fontSize: 10, lineHeight: 1.6, color: '#675e75', margin: '10px 0 0' }}>{topology?.description}</p></>
                 : <EmptyBlock title="Topology catalog is empty" copy="No network topology is currently available from the local API." />}
             </div>
           </Panel>
@@ -414,14 +414,14 @@ function ExperimentsPage() {
             <div className="field"><label htmlFor="exp-duration">Duration · seconds</label><input id="exp-duration" type="number" min="10" max="3600" value={duration} onChange={e => setDuration(Math.max(10, Math.min(3600, Number(e.target.value))))} /></div>
             <div className="field"><label htmlFor="exp-seed">Random seed</label><input id="exp-seed" type="number" value={seed} onChange={e => setSeed(Number(e.target.value))} /></div>
           </div>
-          <div className="field" style={{ marginTop: 15 }}><label>Algorithms · {chosen.length} selected, up to 8</label><div className="check-list">{algorithms.data?.map(algo => <label className="check-row" key={algo.id}><input type="checkbox" checked={chosen.includes(algo.id)} disabled={!algo.available || (!chosen.includes(algo.id) && chosen.length >= 8)} onChange={() => toggle(algo.id)} />{algo.name}<span style={{ marginLeft: 'auto', color: '#859189', fontFamily: 'var(--app-font-mono)', fontSize: 9 }}>{algo.available ? algo.family : 'UNAVAILABLE'}</span></label>)}</div></div>
+          <div className="field" style={{ marginTop: 15 }}><label>Algorithms · {chosen.length} selected, up to 8</label><div className="check-list">{algorithms.data?.map(algo => <label className="check-row" key={algo.id}><input type="checkbox" checked={chosen.includes(algo.id)} disabled={!algo.available || (!chosen.includes(algo.id) && chosen.length >= 8)} onChange={() => toggle(algo.id)} />{algo.name}<span style={{ marginLeft: 'auto', color: '#7a7186', fontFamily: 'var(--app-font-mono)', fontSize: 9 }}>{algo.available ? algo.family : 'UNAVAILABLE'}</span></label>)}</div></div>
           <div className="actions"><button className="btn btn-primary" onClick={() => void submit()} disabled={!topologyId || !chosen.length || run.isPending} data-testid="button-run-experiment"><Play size={13} />{run.isPending ? 'Submitting…' : 'Run comparison'}</button></div>
         </>}
       </div></Panel>
       <Panel title="Saved runs" icon={Clock3} meta={`${experiments.data?.length || 0} RECORDED`}><div className="panel-body" style={{ padding: 0 }}>
         {experiments.isLoading ? <LoadingBlock lines={5} /> : experiments.isError ? <div style={{ padding: 18 }}><ErrorBlock retry={() => void experiments.refetch()} message="Saved runs could not be loaded." /></div> : !experiments.data?.length ? <EmptyBlock title="No experiment runs yet" copy="Comparative runs returned by the simulator will be collected here." /> :
-          <div className="table-scroll"><table className="data-table" data-testid="table-experiments"><thead><tr><th>Topology / created</th><th>Algorithms</th><th>Duration</th><th>Status</th><th>Results</th></tr></thead><tbody>{experiments.data.map(exp => <tr key={exp.id} data-testid={`row-experiment-${exp.id}`}><td><strong>{exp.topologyName}</strong><div className="mono" style={{ color: '#8a958e', marginTop: 5 }}>{new Date(exp.createdAt).toLocaleString()}</div></td><td>{exp.algorithms.length} algorithms</td><td className="mono">{formatDuration(exp.durationSeconds)}</td><td><span className={`badge ${exp.status}`}>{exp.status}</span></td><td>{exp.results?.length || 0} result{exp.results?.length === 1 ? '' : 's'}</td></tr>)}</tbody></table>
-            {experiments.data.map(exp => exp.results?.length ? <div key={`results-${exp.id}`} style={{ padding: '12px 18px 16px', borderTop: '1px solid #efede7' }}><div className="panel-kicker" style={{ marginBottom: 10 }}>RESULTS · {exp.topologyName} / {exp.id.slice(0, 10)}</div><div className="table-scroll"><table className="data-table"><thead><tr><th>Algorithm</th><th>Mean latency</th><th>Throughput</th><th>Packet loss</th><th>Mean queue</th></tr></thead><tbody>{exp.results.map((result, i) => <tr key={`${exp.id}-${result.algorithm}-${i}`}><td>{algorithms.data?.find(a => a.id === result.algorithm)?.name || result.algorithm}</td><td className="mono">{result.meanLatencyMs.toFixed(2)} ms</td><td className="mono">{result.throughputMbps.toFixed(2)} Mbps</td><td className="mono">{result.packetLossPercent.toFixed(3)}%</td><td className="mono">{result.meanQueueOccupancy.toFixed(2)}</td></tr>)}</tbody></table></div></div> : null)}
+          <div className="table-scroll"><table className="data-table" data-testid="table-experiments"><thead><tr><th>Topology / created</th><th>Algorithms</th><th>Duration</th><th>Status</th><th>Results</th></tr></thead><tbody>{experiments.data.map(exp => <tr key={exp.id} data-testid={`row-experiment-${exp.id}`}><td><strong>{exp.topologyName}</strong><div className="mono" style={{ color: '#7a7186', marginTop: 5 }}>{new Date(exp.createdAt).toLocaleString()}</div></td><td>{exp.algorithms.length} algorithms</td><td className="mono">{formatDuration(exp.durationSeconds)}</td><td><span className={`badge ${exp.status}`}>{exp.status}</span></td><td>{exp.results?.length || 0} result{exp.results?.length === 1 ? '' : 's'}</td></tr>)}</tbody></table>
+            {experiments.data.map(exp => exp.results?.length ? <div key={`results-${exp.id}`} style={{ padding: '12px 18px 16px', borderTop: '1px solid #e4e0ea' }}><div className="panel-kicker" style={{ marginBottom: 10 }}>RESULTS · {exp.topologyName} / {exp.id.slice(0, 10)}</div><div className="table-scroll"><table className="data-table"><thead><tr><th>Algorithm</th><th>Mean latency</th><th>Throughput</th><th>Packet loss</th><th>Mean queue</th></tr></thead><tbody>{exp.results.map((result, i) => <tr key={`${exp.id}-${result.algorithm}-${i}`}><td>{algorithms.data?.find(a => a.id === result.algorithm)?.name || result.algorithm}</td><td className="mono">{result.meanLatencyMs.toFixed(2)} ms</td><td className="mono">{result.throughputMbps.toFixed(2)} Mbps</td><td className="mono">{result.packetLossPercent.toFixed(3)}%</td><td className="mono">{result.meanQueueOccupancy.toFixed(2)}</td></tr>)}</tbody></table></div></div> : null)}
           </div>}
       </div></Panel>
     </div>
@@ -482,7 +482,7 @@ function AlgorithmsPage() {
   }, [algorithms.data]);
   return <main className="page"><PageHead eyebrow="03 / Method catalog" title="Routing algorithms" subtitle="The methods and baselines exposed by the current simulator API. Availability reflects the API response." right={<div className="status-line"><Waypoints size={14} />{algorithms.data?.length || 0} METHODS</div>} />
     {algorithms.isLoading || topologies.isLoading ? <LoadingBlock lines={6} /> : algorithms.isError ? <ErrorBlock retry={() => void algorithms.refetch()} message="Algorithm catalog could not be loaded." /> : !algorithms.data?.length ? <EmptyBlock title="No algorithms registered" copy="The local API returned an empty routing catalog." /> :
-      <div style={{ display: 'grid', gap: 18 }}>{grouped.map(([family, entries]) => <section key={family}><div className="eyebrow" style={{ marginBottom: 9 }}>{family} <span style={{ color: '#9aa39c' }}> / {entries.length} METHOD{entries.length === 1 ? '' : 'S'}</span></div><div className="algo-list">{entries.map(algo => <article className="algo-card" key={algo.id} data-testid={`card-algorithm-${algo.id}`}><div><div className="algo-name">{algo.name}</div><div className="algo-family">{algo.family} · <span style={{ color: algo.available ? '#43846d' : '#a46c48' }}>{algo.available ? 'AVAILABLE' : 'UNAVAILABLE'}</span></div><p className="algo-desc">{algo.description}</p><div className="mono" style={{ color: '#9aa39c', marginTop: 9 }}>{algo.id}</div></div><div className="algo-symbol">{algo.available ? <Check size={17} /> : <CircleHelp size={17} />}</div></article>)}</div></section>)}
+      <div style={{ display: 'grid', gap: 18 }}>{grouped.map(([family, entries]) => <section key={family}><div className="eyebrow" style={{ marginBottom: 9 }}>{family} <span style={{ color: '#7a7186' }}> / {entries.length} METHOD{entries.length === 1 ? '' : 'S'}</span></div><div className="algo-list">{entries.map(algo => <article className="algo-card" key={algo.id} data-testid={`card-algorithm-${algo.id}`}><div><div className="algo-name">{algo.name}</div><div className="algo-family">{algo.family} · <span style={{ color: algo.available ? '#a6751a' : '#963e37' }}>{algo.available ? 'AVAILABLE' : 'UNAVAILABLE'}</span></div><p className="algo-desc">{algo.description}</p><div className="mono" style={{ color: '#7a7186', marginTop: 9 }}>{algo.id}</div></div><div className="algo-symbol">{algo.available ? <Check size={17} /> : <CircleHelp size={17} />}</div></article>)}</div></section>)}
       <Panel title="Catalog scope" icon={BookOpen} meta="API-DEFINED"><div className="panel-body"><div className="info-row"><span className="info-label">Methods</span><span className="info-copy">{algorithms.data.length} returned from local API</span></div><div className="info-row"><span className="info-label">Topologies</span><span className="info-copy">{topologies.data?.length ?? '—'} available for evaluation</span></div><div className="info-row"><span className="info-label">Method claims</span><span className="info-copy">No paper-specific guarantees asserted. Validate implementations against your research protocol.</span></div></div></Panel>
       </div>}
   </main>;
@@ -508,7 +508,7 @@ function SettingsPage() {
       </div></Panel>
       <Panel title="Validation status" icon={CircleHelp} meta="RESEARCH BUILD"><div className="panel-body">
         <div className="run-status"><div className="status-name"><i className="status-marker" />Paper validation not supplied</div><span className="badge idle">UNVERIFIED</span></div>
-        <p style={{ fontSize: 11, lineHeight: 1.75, color: '#738079', margin: 0 }}>The referenced paper equation, algorithm procedure, and dashboard page list were not provided. This console reports simulator API values as returned and makes no paper-accurate mathematical or performance claim. Confirm model behavior and baselines against the source research before interpreting results.</p>
+        <p style={{ fontSize: 11, lineHeight: 1.75, color: '#675e75', margin: 0 }}>The referenced paper equation, algorithm procedure, and dashboard page list were not provided. This console reports simulator API values as returned and makes no paper-accurate mathematical or performance claim. Confirm model behavior and baselines against the source research before interpreting results.</p>
       </div></Panel>
       <Panel title="Data handling" icon={ArrowDownToLine} meta="API SOURCE"><div className="panel-body">
         <div className="info-row"><span className="info-label">Displayed values</span><span className="info-copy">Live topology, simulation, queue and experiment responses</span></div>
