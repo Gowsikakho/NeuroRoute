@@ -42,8 +42,7 @@ import type {
   Topology
 } from './api.schemas';
 
-import { customFetch } from '../custom-fetch';
-import type { ErrorType , BodyType } from '../custom-fetch';
+import { customFetch } from '../custom-fetch.js';
 
 type AwaitedInput<T> = PromiseLike<T> | T;
 
@@ -103,7 +102,7 @@ export const getHealthCheckQueryKey = () => {
     }
 
 
-export const getHealthCheckQueryOptions = <TData = Awaited<ReturnType<typeof healthCheck>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof healthCheck>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+export const getHealthCheckQueryOptions = <TData = Awaited<ReturnType<typeof healthCheck>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof healthCheck>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -122,10 +121,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type HealthCheckQueryResult = NonNullable<Awaited<ReturnType<typeof healthCheck>>>
-export type HealthCheckQueryError = ErrorType<unknown>
+export type HealthCheckQueryError = unknown
 
 
-export function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, TError = ErrorType<unknown>>(
+export function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, TError = unknown>(
   options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof healthCheck>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof healthCheck>>,
@@ -135,7 +134,7 @@ export function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, 
       >, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, TError = ErrorType<unknown>>(
+export function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof healthCheck>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof healthCheck>>,
@@ -145,7 +144,7 @@ export function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, 
       >, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, TError = ErrorType<unknown>>(
+export function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof healthCheck>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
@@ -153,7 +152,7 @@ export function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, 
  * @summary Health check
  */
 
-export function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, TError = ErrorType<unknown>>(
+export function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof healthCheck>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
@@ -204,7 +203,7 @@ export const getGetTopologiesQueryKey = () => {
     }
 
 
-export const getGetTopologiesQueryOptions = <TData = Awaited<ReturnType<typeof getTopologies>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getTopologies>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+export const getGetTopologiesQueryOptions = <TData = Awaited<ReturnType<typeof getTopologies>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getTopologies>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -223,10 +222,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type GetTopologiesQueryResult = NonNullable<Awaited<ReturnType<typeof getTopologies>>>
-export type GetTopologiesQueryError = ErrorType<unknown>
+export type GetTopologiesQueryError = unknown
 
 
-export function useGetTopologies<TData = Awaited<ReturnType<typeof getTopologies>>, TError = ErrorType<unknown>>(
+export function useGetTopologies<TData = Awaited<ReturnType<typeof getTopologies>>, TError = unknown>(
   options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getTopologies>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getTopologies>>,
@@ -236,7 +235,7 @@ export function useGetTopologies<TData = Awaited<ReturnType<typeof getTopologies
       >, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetTopologies<TData = Awaited<ReturnType<typeof getTopologies>>, TError = ErrorType<unknown>>(
+export function useGetTopologies<TData = Awaited<ReturnType<typeof getTopologies>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getTopologies>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getTopologies>>,
@@ -246,7 +245,7 @@ export function useGetTopologies<TData = Awaited<ReturnType<typeof getTopologies
       >, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetTopologies<TData = Awaited<ReturnType<typeof getTopologies>>, TError = ErrorType<unknown>>(
+export function useGetTopologies<TData = Awaited<ReturnType<typeof getTopologies>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getTopologies>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
@@ -254,7 +253,7 @@ export function useGetTopologies<TData = Awaited<ReturnType<typeof getTopologies
  * @summary List available network topologies
  */
 
-export function useGetTopologies<TData = Awaited<ReturnType<typeof getTopologies>>, TError = ErrorType<unknown>>(
+export function useGetTopologies<TData = Awaited<ReturnType<typeof getTopologies>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getTopologies>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
@@ -305,7 +304,7 @@ export const getGetAlgorithmsQueryKey = () => {
     }
 
 
-export const getGetAlgorithmsQueryOptions = <TData = Awaited<ReturnType<typeof getAlgorithms>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAlgorithms>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+export const getGetAlgorithmsQueryOptions = <TData = Awaited<ReturnType<typeof getAlgorithms>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAlgorithms>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -324,10 +323,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type GetAlgorithmsQueryResult = NonNullable<Awaited<ReturnType<typeof getAlgorithms>>>
-export type GetAlgorithmsQueryError = ErrorType<unknown>
+export type GetAlgorithmsQueryError = unknown
 
 
-export function useGetAlgorithms<TData = Awaited<ReturnType<typeof getAlgorithms>>, TError = ErrorType<unknown>>(
+export function useGetAlgorithms<TData = Awaited<ReturnType<typeof getAlgorithms>>, TError = unknown>(
   options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAlgorithms>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getAlgorithms>>,
@@ -337,7 +336,7 @@ export function useGetAlgorithms<TData = Awaited<ReturnType<typeof getAlgorithms
       >, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetAlgorithms<TData = Awaited<ReturnType<typeof getAlgorithms>>, TError = ErrorType<unknown>>(
+export function useGetAlgorithms<TData = Awaited<ReturnType<typeof getAlgorithms>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAlgorithms>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getAlgorithms>>,
@@ -347,7 +346,7 @@ export function useGetAlgorithms<TData = Awaited<ReturnType<typeof getAlgorithms
       >, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetAlgorithms<TData = Awaited<ReturnType<typeof getAlgorithms>>, TError = ErrorType<unknown>>(
+export function useGetAlgorithms<TData = Awaited<ReturnType<typeof getAlgorithms>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAlgorithms>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
@@ -355,7 +354,7 @@ export function useGetAlgorithms<TData = Awaited<ReturnType<typeof getAlgorithms
  * @summary List routing algorithms and baselines
  */
 
-export function useGetAlgorithms<TData = Awaited<ReturnType<typeof getAlgorithms>>, TError = ErrorType<unknown>>(
+export function useGetAlgorithms<TData = Awaited<ReturnType<typeof getAlgorithms>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAlgorithms>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
@@ -406,7 +405,7 @@ export const getGetSimulationQueryKey = () => {
     }
 
 
-export const getGetSimulationQueryOptions = <TData = Awaited<ReturnType<typeof getSimulation>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getSimulation>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+export const getGetSimulationQueryOptions = <TData = Awaited<ReturnType<typeof getSimulation>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getSimulation>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -425,10 +424,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type GetSimulationQueryResult = NonNullable<Awaited<ReturnType<typeof getSimulation>>>
-export type GetSimulationQueryError = ErrorType<unknown>
+export type GetSimulationQueryError = unknown
 
 
-export function useGetSimulation<TData = Awaited<ReturnType<typeof getSimulation>>, TError = ErrorType<unknown>>(
+export function useGetSimulation<TData = Awaited<ReturnType<typeof getSimulation>>, TError = unknown>(
   options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getSimulation>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getSimulation>>,
@@ -438,7 +437,7 @@ export function useGetSimulation<TData = Awaited<ReturnType<typeof getSimulation
       >, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetSimulation<TData = Awaited<ReturnType<typeof getSimulation>>, TError = ErrorType<unknown>>(
+export function useGetSimulation<TData = Awaited<ReturnType<typeof getSimulation>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getSimulation>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getSimulation>>,
@@ -448,7 +447,7 @@ export function useGetSimulation<TData = Awaited<ReturnType<typeof getSimulation
       >, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetSimulation<TData = Awaited<ReturnType<typeof getSimulation>>, TError = ErrorType<unknown>>(
+export function useGetSimulation<TData = Awaited<ReturnType<typeof getSimulation>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getSimulation>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
@@ -456,7 +455,7 @@ export function useGetSimulation<TData = Awaited<ReturnType<typeof getSimulation
  * @summary Get the current simulation state
  */
 
-export function useGetSimulation<TData = Awaited<ReturnType<typeof getSimulation>>, TError = ErrorType<unknown>>(
+export function useGetSimulation<TData = Awaited<ReturnType<typeof getSimulation>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getSimulation>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
@@ -516,7 +515,7 @@ return customFetch<SimulationState>(getStartSimulationUrl(),
 
 export const getStartSimulationMutationKey = () => ['startSimulation'] as const;
 
-export const getStartSimulationMutationOptions = <TError = ErrorType<void>,
+export const getStartSimulationMutationOptions = <TError = void,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startSimulation>>, TError,StartSimulationMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof startSimulation>>, TError,StartSimulationMutationVariables, TContext> => {
 
@@ -544,14 +543,14 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type StartSimulationMutationResult = NonNullable<Awaited<ReturnType<typeof startSimulation>>>
-    export type StartSimulationMutationBody = BodyType<SimulationStartInput>
-    export type StartSimulationMutationError = ErrorType<void>
-    export type StartSimulationMutationVariables = {data: BodyType<SimulationStartInput>}
+    export type StartSimulationMutationBody = SimulationStartInput
+    export type StartSimulationMutationError = void
+    export type StartSimulationMutationVariables = {data: SimulationStartInput}
 
     /**
  * @summary Start a simulation run
  */
-export const useStartSimulation = <TError = ErrorType<void>,
+export const useStartSimulation = <TError = void,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startSimulation>>, TError,StartSimulationMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof startSimulation>>,
@@ -590,7 +589,7 @@ export const stopSimulation = async ( options?: Parameters<typeof customFetch>[1
 
 export const getStopSimulationMutationKey = () => ['stopSimulation'] as const;
 
-export const getStopSimulationMutationOptions = <TError = ErrorType<unknown>,
+export const getStopSimulationMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof stopSimulation>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof stopSimulation>>, TError,void, TContext> => {
 
@@ -619,13 +618,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type StopSimulationMutationResult = NonNullable<Awaited<ReturnType<typeof stopSimulation>>>
 
-    export type StopSimulationMutationError = ErrorType<unknown>
+    export type StopSimulationMutationError = unknown
 
 
     /**
  * @summary Stop the current simulation run
  */
-export const useStopSimulation = <TError = ErrorType<unknown>,
+export const useStopSimulation = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof stopSimulation>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof stopSimulation>>,
@@ -664,7 +663,7 @@ export const resetSimulation = async ( options?: Parameters<typeof customFetch>[
 
 export const getResetSimulationMutationKey = () => ['resetSimulation'] as const;
 
-export const getResetSimulationMutationOptions = <TError = ErrorType<unknown>,
+export const getResetSimulationMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resetSimulation>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof resetSimulation>>, TError,void, TContext> => {
 
@@ -693,13 +692,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type ResetSimulationMutationResult = NonNullable<Awaited<ReturnType<typeof resetSimulation>>>
 
-    export type ResetSimulationMutationError = ErrorType<unknown>
+    export type ResetSimulationMutationError = unknown
 
 
     /**
  * @summary Reset the current simulation run
  */
-export const useResetSimulation = <TError = ErrorType<unknown>,
+export const useResetSimulation = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resetSimulation>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof resetSimulation>>,
@@ -750,7 +749,7 @@ export const getGetQueueMetricsQueryKey = (params?: GetQueueMetricsParams,) => {
     }
 
 
-export const getGetQueueMetricsQueryOptions = <TData = Awaited<ReturnType<typeof getQueueMetrics>>, TError = ErrorType<unknown>>(params?: GetQueueMetricsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getQueueMetrics>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+export const getGetQueueMetricsQueryOptions = <TData = Awaited<ReturnType<typeof getQueueMetrics>>, TError = unknown>(params?: GetQueueMetricsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getQueueMetrics>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -769,10 +768,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type GetQueueMetricsQueryResult = NonNullable<Awaited<ReturnType<typeof getQueueMetrics>>>
-export type GetQueueMetricsQueryError = ErrorType<unknown>
+export type GetQueueMetricsQueryError = unknown
 
 
-export function useGetQueueMetrics<TData = Awaited<ReturnType<typeof getQueueMetrics>>, TError = ErrorType<unknown>>(
+export function useGetQueueMetrics<TData = Awaited<ReturnType<typeof getQueueMetrics>>, TError = unknown>(
  params: undefined |  GetQueueMetricsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getQueueMetrics>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getQueueMetrics>>,
@@ -782,7 +781,7 @@ export function useGetQueueMetrics<TData = Awaited<ReturnType<typeof getQueueMet
       >, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetQueueMetrics<TData = Awaited<ReturnType<typeof getQueueMetrics>>, TError = ErrorType<unknown>>(
+export function useGetQueueMetrics<TData = Awaited<ReturnType<typeof getQueueMetrics>>, TError = unknown>(
  params?: GetQueueMetricsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getQueueMetrics>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getQueueMetrics>>,
@@ -792,7 +791,7 @@ export function useGetQueueMetrics<TData = Awaited<ReturnType<typeof getQueueMet
       >, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetQueueMetrics<TData = Awaited<ReturnType<typeof getQueueMetrics>>, TError = ErrorType<unknown>>(
+export function useGetQueueMetrics<TData = Awaited<ReturnType<typeof getQueueMetrics>>, TError = unknown>(
  params?: GetQueueMetricsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getQueueMetrics>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
@@ -800,7 +799,7 @@ export function useGetQueueMetrics<TData = Awaited<ReturnType<typeof getQueueMet
  * @summary Get queue occupancy time series
  */
 
-export function useGetQueueMetrics<TData = Awaited<ReturnType<typeof getQueueMetrics>>, TError = ErrorType<unknown>>(
+export function useGetQueueMetrics<TData = Awaited<ReturnType<typeof getQueueMetrics>>, TError = unknown>(
  params?: GetQueueMetricsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getQueueMetrics>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
@@ -851,7 +850,7 @@ export const getGetControllerStateQueryKey = () => {
     }
 
 
-export const getGetControllerStateQueryOptions = <TData = Awaited<ReturnType<typeof getControllerState>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getControllerState>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+export const getGetControllerStateQueryOptions = <TData = Awaited<ReturnType<typeof getControllerState>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getControllerState>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -870,10 +869,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type GetControllerStateQueryResult = NonNullable<Awaited<ReturnType<typeof getControllerState>>>
-export type GetControllerStateQueryError = ErrorType<unknown>
+export type GetControllerStateQueryError = unknown
 
 
-export function useGetControllerState<TData = Awaited<ReturnType<typeof getControllerState>>, TError = ErrorType<unknown>>(
+export function useGetControllerState<TData = Awaited<ReturnType<typeof getControllerState>>, TError = unknown>(
   options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getControllerState>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getControllerState>>,
@@ -883,7 +882,7 @@ export function useGetControllerState<TData = Awaited<ReturnType<typeof getContr
       >, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetControllerState<TData = Awaited<ReturnType<typeof getControllerState>>, TError = ErrorType<unknown>>(
+export function useGetControllerState<TData = Awaited<ReturnType<typeof getControllerState>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getControllerState>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getControllerState>>,
@@ -893,7 +892,7 @@ export function useGetControllerState<TData = Awaited<ReturnType<typeof getContr
       >, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetControllerState<TData = Awaited<ReturnType<typeof getControllerState>>, TError = ErrorType<unknown>>(
+export function useGetControllerState<TData = Awaited<ReturnType<typeof getControllerState>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getControllerState>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
@@ -901,7 +900,7 @@ export function useGetControllerState<TData = Awaited<ReturnType<typeof getContr
  * @summary Get simulated switch, flow-table, port, and queue state
  */
 
-export function useGetControllerState<TData = Awaited<ReturnType<typeof getControllerState>>, TError = ErrorType<unknown>>(
+export function useGetControllerState<TData = Awaited<ReturnType<typeof getControllerState>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getControllerState>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
@@ -961,7 +960,7 @@ return customFetch<QueueRateState>(getInstallQueueRateUrl(),
 
 export const getInstallQueueRateMutationKey = () => ['installQueueRate'] as const;
 
-export const getInstallQueueRateMutationOptions = <TError = ErrorType<unknown>,
+export const getInstallQueueRateMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof installQueueRate>>, TError,InstallQueueRateMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof installQueueRate>>, TError,InstallQueueRateMutationVariables, TContext> => {
 
@@ -989,14 +988,14 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type InstallQueueRateMutationResult = NonNullable<Awaited<ReturnType<typeof installQueueRate>>>
-    export type InstallQueueRateMutationBody = BodyType<QueueRateInput>
-    export type InstallQueueRateMutationError = ErrorType<unknown>
-    export type InstallQueueRateMutationVariables = {data: BodyType<QueueRateInput>}
+    export type InstallQueueRateMutationBody = QueueRateInput
+    export type InstallQueueRateMutationError = unknown
+    export type InstallQueueRateMutationVariables = {data: QueueRateInput}
 
     /**
  * @summary Install a simulated LS/TS queue-rate split on a switch
  */
-export const useInstallQueueRate = <TError = ErrorType<unknown>,
+export const useInstallQueueRate = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof installQueueRate>>, TError,InstallQueueRateMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof installQueueRate>>,
@@ -1049,7 +1048,7 @@ return customFetch<FlowRule>(getInstallFlowRuleUrl(),
 
 export const getInstallFlowRuleMutationKey = () => ['installFlowRule'] as const;
 
-export const getInstallFlowRuleMutationOptions = <TError = ErrorType<unknown>,
+export const getInstallFlowRuleMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof installFlowRule>>, TError,InstallFlowRuleMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof installFlowRule>>, TError,InstallFlowRuleMutationVariables, TContext> => {
 
@@ -1077,14 +1076,14 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type InstallFlowRuleMutationResult = NonNullable<Awaited<ReturnType<typeof installFlowRule>>>
-    export type InstallFlowRuleMutationBody = BodyType<FlowRuleInput>
-    export type InstallFlowRuleMutationError = ErrorType<unknown>
-    export type InstallFlowRuleMutationVariables = {data: BodyType<FlowRuleInput>}
+    export type InstallFlowRuleMutationBody = FlowRuleInput
+    export type InstallFlowRuleMutationError = unknown
+    export type InstallFlowRuleMutationVariables = {data: FlowRuleInput}
 
     /**
  * @summary Install a simulated flow-table rule
  */
-export const useInstallFlowRule = <TError = ErrorType<unknown>,
+export const useInstallFlowRule = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof installFlowRule>>, TError,InstallFlowRuleMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof installFlowRule>>,
@@ -1128,7 +1127,7 @@ export const getGetExperimentsQueryKey = () => {
     }
 
 
-export const getGetExperimentsQueryOptions = <TData = Awaited<ReturnType<typeof getExperiments>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getExperiments>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+export const getGetExperimentsQueryOptions = <TData = Awaited<ReturnType<typeof getExperiments>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getExperiments>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -1147,10 +1146,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type GetExperimentsQueryResult = NonNullable<Awaited<ReturnType<typeof getExperiments>>>
-export type GetExperimentsQueryError = ErrorType<unknown>
+export type GetExperimentsQueryError = unknown
 
 
-export function useGetExperiments<TData = Awaited<ReturnType<typeof getExperiments>>, TError = ErrorType<unknown>>(
+export function useGetExperiments<TData = Awaited<ReturnType<typeof getExperiments>>, TError = unknown>(
   options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getExperiments>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getExperiments>>,
@@ -1160,7 +1159,7 @@ export function useGetExperiments<TData = Awaited<ReturnType<typeof getExperimen
       >, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetExperiments<TData = Awaited<ReturnType<typeof getExperiments>>, TError = ErrorType<unknown>>(
+export function useGetExperiments<TData = Awaited<ReturnType<typeof getExperiments>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getExperiments>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getExperiments>>,
@@ -1170,7 +1169,7 @@ export function useGetExperiments<TData = Awaited<ReturnType<typeof getExperimen
       >, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetExperiments<TData = Awaited<ReturnType<typeof getExperiments>>, TError = ErrorType<unknown>>(
+export function useGetExperiments<TData = Awaited<ReturnType<typeof getExperiments>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getExperiments>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
@@ -1178,7 +1177,7 @@ export function useGetExperiments<TData = Awaited<ReturnType<typeof getExperimen
  * @summary List saved experiment runs
  */
 
-export function useGetExperiments<TData = Awaited<ReturnType<typeof getExperiments>>, TError = ErrorType<unknown>>(
+export function useGetExperiments<TData = Awaited<ReturnType<typeof getExperiments>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getExperiments>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
@@ -1229,7 +1228,7 @@ export const getGetExperimentBaselinesQueryKey = () => {
     }
 
 
-export const getGetExperimentBaselinesQueryOptions = <TData = Awaited<ReturnType<typeof getExperimentBaselines>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getExperimentBaselines>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+export const getGetExperimentBaselinesQueryOptions = <TData = Awaited<ReturnType<typeof getExperimentBaselines>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getExperimentBaselines>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -1248,10 +1247,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type GetExperimentBaselinesQueryResult = NonNullable<Awaited<ReturnType<typeof getExperimentBaselines>>>
-export type GetExperimentBaselinesQueryError = ErrorType<unknown>
+export type GetExperimentBaselinesQueryError = unknown
 
 
-export function useGetExperimentBaselines<TData = Awaited<ReturnType<typeof getExperimentBaselines>>, TError = ErrorType<unknown>>(
+export function useGetExperimentBaselines<TData = Awaited<ReturnType<typeof getExperimentBaselines>>, TError = unknown>(
   options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getExperimentBaselines>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getExperimentBaselines>>,
@@ -1261,7 +1260,7 @@ export function useGetExperimentBaselines<TData = Awaited<ReturnType<typeof getE
       >, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetExperimentBaselines<TData = Awaited<ReturnType<typeof getExperimentBaselines>>, TError = ErrorType<unknown>>(
+export function useGetExperimentBaselines<TData = Awaited<ReturnType<typeof getExperimentBaselines>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getExperimentBaselines>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getExperimentBaselines>>,
@@ -1271,7 +1270,7 @@ export function useGetExperimentBaselines<TData = Awaited<ReturnType<typeof getE
       >, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetExperimentBaselines<TData = Awaited<ReturnType<typeof getExperimentBaselines>>, TError = ErrorType<unknown>>(
+export function useGetExperimentBaselines<TData = Awaited<ReturnType<typeof getExperimentBaselines>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getExperimentBaselines>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
@@ -1279,7 +1278,7 @@ export function useGetExperimentBaselines<TData = Awaited<ReturnType<typeof getE
  * @summary Read the static and ECMP baseline CSV results
  */
 
-export function useGetExperimentBaselines<TData = Awaited<ReturnType<typeof getExperimentBaselines>>, TError = ErrorType<unknown>>(
+export function useGetExperimentBaselines<TData = Awaited<ReturnType<typeof getExperimentBaselines>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getExperimentBaselines>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
@@ -1339,7 +1338,7 @@ return customFetch<Experiment>(getRunExperimentUrl(),
 
 export const getRunExperimentMutationKey = () => ['runExperiment'] as const;
 
-export const getRunExperimentMutationOptions = <TError = ErrorType<unknown>,
+export const getRunExperimentMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runExperiment>>, TError,RunExperimentMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof runExperiment>>, TError,RunExperimentMutationVariables, TContext> => {
 
@@ -1367,14 +1366,14 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type RunExperimentMutationResult = NonNullable<Awaited<ReturnType<typeof runExperiment>>>
-    export type RunExperimentMutationBody = BodyType<ExperimentInput>
-    export type RunExperimentMutationError = ErrorType<unknown>
-    export type RunExperimentMutationVariables = {data: BodyType<ExperimentInput>}
+    export type RunExperimentMutationBody = ExperimentInput
+    export type RunExperimentMutationError = unknown
+    export type RunExperimentMutationVariables = {data: ExperimentInput}
 
     /**
  * @summary Run a comparative experiment
  */
-export const useRunExperiment = <TError = ErrorType<unknown>,
+export const useRunExperiment = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runExperiment>>, TError,RunExperimentMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof runExperiment>>,

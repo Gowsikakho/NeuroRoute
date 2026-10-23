@@ -75,4 +75,4 @@ PYTHONPATH=. uv run --project ../../.. pytest
 
 The pytest suite includes a seeded M/M/1 queue check against the theoretical mean delay `1 / (service rate - arrival rate)` with a 5% tolerance.
 
-For the frontend, run `pnpm --filter @workspace/neuroroute-sdn run typecheck` from the project root.
+For the frontend, run `pnpm --filter @workspace/neuroroute-sdn run build` from the project root. The dashboard source is JavaScript/JSX.

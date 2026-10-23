@@ -8,14 +8,13 @@ Windows-first SDN research simulator with a SimPy/FastAPI backend and a live Rea
 - `pnpm --filter @workspace/neuroroute-sdn run dev` — run the NeuroRoute dashboard
 - `py -3.11 -m uvicorn neuroroute_api.main:app --app-dir artifacts/neuroroute-sdn/backend --port 8000` — run the native Python API from the workspace root
 - `pwsh -File artifacts/neuroroute-sdn/scripts/run_all.ps1` — run the built-in experiment suite and export CSV/SVG charts
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
+- `pnpm run build` — build all packages
+- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec (Orval writes TypeScript into `lib/api-client-react/src/generated` and `lib/api-zod/src/generated`)
 - Required env: none for the local simulator; runtime data is stored in SQLite
 
 ## Stack
 
-- pnpm workspaces, Node.js 24, TypeScript 5.9
+- pnpm workspaces, Node.js 24, JavaScript (ESM); hand-written source is plain JS/JSX — the `@workspace/api-client-react` and `@workspace/api-zod` packages are Orval-generated TypeScript (including their `src/index.ts` entry, which codegen rewrites) and Vite/esbuild compile those natively
 - API: Python 3.11 FastAPI; Express 5 proxies hosted preview requests
 - DB: SQLite + SQLAlchemy for simulator experiments and queue samples
 - Validation: Zod (`zod/v4`), `drizzle-zod`
@@ -49,4 +48,4 @@ _Populate as you build — sharp edges, "always run X before Y" rules._
 
 ## Pointers
 
-- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+- See the `pnpm-workspace` skill for workspace structure and package details

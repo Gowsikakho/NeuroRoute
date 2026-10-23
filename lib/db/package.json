@@ -4,12 +4,12 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./schema": "./src/schema/index.ts"
+    ".": "./src/index.js",
+    "./schema": "./src/schema/index.js"
   },
   "scripts": {
-    "push": "drizzle-kit push --config ./drizzle.config.ts",
-    "push-force": "drizzle-kit push --force --config ./drizzle.config.ts"
+    "push": "drizzle-kit push --config ./drizzle.config.js",
+    "push-force": "drizzle-kit push --force --config ./drizzle.config.js"
   },
   "dependencies": {
     "drizzle-orm": "catalog:",
